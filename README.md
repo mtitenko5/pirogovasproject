@@ -1,2 +1,2 @@
 # pirogovasproject
-This is a roadmap of student project for practice 
+This is a repository of student project for practice 
