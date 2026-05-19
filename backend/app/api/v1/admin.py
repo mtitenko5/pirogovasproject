@@ -84,10 +84,10 @@ async def upload_report_template(
 
 @router.post("/clinical-protocols/add", response_model=List[ClinicalProtocolOut])
 async def add_clinical_protocols(
-    files: List[UploadFile] = File(...),
+    file: UploadFile = File(..., description="PDF file"),
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)):
     try:
-        return await admin_service.add_clinical_protocols(db=db, files=files, uploaded_by_user_id=admin.id, docs_path="clinical_recommendations")
+        return await admin_service.add_clinical_protocols(db=db, file=file, uploaded_by_user_id=admin.id, docs_path="clinical_protocols")
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

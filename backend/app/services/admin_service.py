@@ -155,30 +155,28 @@ async def create_report_template(
 #
 #     return created_protocols
 
-async def add_clinical_protocols(files: List[UploadFile], uploaded_by_user_id: int, db: AsyncSession, docs_path: str = "clinical_recommendations") -> List[ClinicalProtocol]:
+async def add_clinical_protocols(file: UploadFile, uploaded_by_user_id: int, db: AsyncSession, docs_path: str = "clinical_protocols") -> List[ClinicalProtocol]:
     new_docs = []
     with tempfile.TemporaryDirectory() as tmp_dir:
-        for file in files:
-            if file.content_type != "application/pdf":
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"{file.filename} is not a PDF file"
-                )
-            tmp_path = Path(tmp_dir) / file.filename
-            content = await file.read()
-            await file.seek(0)
-            tmp_path.write_bytes(content)
-            loader = PyPDFLoader(str(tmp_path))
-            new_docs.extend(loader.load())
+        if file.content_type != "application/pdf":
+            raise HTTPException(
+                status_code=400,
+                detail=f"{file.filename} is not a PDF file"
+            )
+        tmp_path = Path(tmp_dir) / file.filename
+        content = await file.read()
+        await file.seek(0)
+        tmp_path.write_bytes(content)
+        loader = PyPDFLoader(str(tmp_path))
+        new_docs.extend(loader.load())
 
     incremental_add_to_kb(docs_path, new_docs, use_bm25=True)
 
     created = []
-    for file in files:
-        object_key = await storage_service.upload_file(file=file, prefix="clinical_protocols/")
-        protocol = ClinicalProtocol(title=file.filename, file_object_key=object_key, uploaded_by_user_id=uploaded_by_user_id, status=ClinicalProtocolStatus.INDEXED)
-        db.add(protocol)
-        created.append(protocol)
+    object_key = await storage_service.upload_file(file=file, prefix="clinical_protocols/")
+    protocol = ClinicalProtocol(title=file.filename, file_object_key=object_key, uploaded_by_user_id=uploaded_by_user_id, status=ClinicalProtocolStatus.INDEXED)
+    db.add(protocol)
+    created.append(protocol)
 
     await db.commit()
     return created

@@ -4,39 +4,15 @@ import logging
 import threading
 import time
 import traceback
-
+import os
+import pickle
 import numpy as np
 
-try:
-    from .bm25_index import build_bm25_corpus, build_bm25_index
-    from .chunker import build_chunks
-    from .embedder import embed_texts
-    from .graph_builder import (
-        build_knowledge_graph,
-        load_graph_from_disk,
-        save_graph_to_disk,
-    )
-    from .vector_store import (
-        build_cluster_indexes,
-        build_faiss_index,
-        load_kb_from_disk,
-        save_kb_to_disk,
-    )
-except ImportError:
-    from bm25_index import build_bm25_corpus, build_bm25_index
-    from chunker import build_chunks
-    from embedder import embed_texts
-    from graph_builder import (
-        build_knowledge_graph,
-        load_graph_from_disk,
-        save_graph_to_disk,
-    )
-    from vector_store import (
-        build_cluster_indexes,
-        build_faiss_index,
-        load_kb_from_disk,
-        save_kb_to_disk,
-    )
+from .bm25_index import build_bm25_corpus, _tokenize_bm25, build_bm25_index
+from .chunker import build_chunks
+from .embedder import embed_texts
+from .graph_builder import build_knowledge_graph, load_graph_from_disk, save_graph_to_disk
+from .vector_store import build_cluster_indexes, build_faiss_index, load_kb_from_disk, save_kb_to_disk
 
 class VersionedKB(TypedDict):
     versions: Dict[str, Dict[str, Any]]
