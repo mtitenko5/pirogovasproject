@@ -63,6 +63,8 @@ services:
     volumes:
       - ./backend:/app
       - ./clinical_protocols:/app/clinical_protocols
+      - ./.hf_cache/sentence_transformers:/app/.cache/sentence_transformers
+      - ./.hf_cache/huggingface:/app/.cache/huggingface
     networks:
       - backend
   

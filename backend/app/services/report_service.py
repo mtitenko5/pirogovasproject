@@ -2,11 +2,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import uuid
 from typing import List, Optional
-from datetime import datetime, timezone
+import asyncio
+from langsmith import Client
+import os
 
 from app.models.report import Report
 from app.models.user import User
 from app.models.llm_calls import LLMCall
+from app.models.report_templates import ReportTemplate
 from app.core.enum.report_status import ReportStatus
 from app.schemas.report import ReportReviewUpdate
 from app.core.enum.call_type import CallType, CallStatus
@@ -95,8 +98,8 @@ async def render_and_store_report_files(
     db: AsyncSession,
     report: Report,
 ) -> tuple[str, str]:
-
-    html_content = generate_html_report(report)
+    template_content = await _get_template_content(db, report.template_id)
+    html_content = generate_html_report(report, template_content=template_content)
     html_object_key = await storage_service.upload_text(
         text=html_content,
         prefix=f"reports/{report.id_report}/result",
@@ -121,12 +124,52 @@ async def render_and_store_report_files(
 async def add_review(db: AsyncSession, review: ReportReviewUpdate, id_report: str):
     result = await db.execute(select(Report).where(Report.id_report == id_report))
     report = result.scalar_one_or_none()
-
     if not report:
         raise ValueError("Report not found")
-
     report.review_score = review.review_score
     report.review_text = review.review_text
-    report.reviewed_at = datetime.now(timezone.utc)
-
     await db.commit()
+    await asyncio.to_thread(_send_feedback_to_langsmith, id_report, review.review_score, review.review_text)
+
+def _send_feedback_to_langsmith(report_id: str, score: int, comment: str):
+    client = Client()
+    project = os.getenv("LANGSMITH_PROJECT", "clinical-rag")
+
+    filter_string = (
+        f"and("
+        f"eq(metadata_key, 'report_id'), "
+        f"eq(metadata_value, '{report_id}')"
+        f")"
+    )
+
+    runs = client.list_runs(
+        project_name=project,
+        filter=filter_string,
+        is_root=True,
+        limit=1,
+    )
+
+    run = next(runs, None)
+    if not run:
+        return
+
+    client.create_feedback(
+        run_id=run.id,
+        key="doctor_rating",
+        score=score,
+        comment=comment or "",
+    )
+
+
+async def _get_template_content(db: AsyncSession, template_id: Optional[int]) -> Optional[str]:
+    """Возвращает content шаблона по ID или активный по умолчанию."""
+    if template_id is not None:
+        result = await db.execute(select(ReportTemplate).where(ReportTemplate.id == template_id))
+        tpl = result.scalar_one_or_none()
+        if tpl:
+            return tpl.content
+
+    #любой активный шаблон
+    result = await db.execute(select(ReportTemplate).where(ReportTemplate.is_active == True).order_by(ReportTemplate.updated_at.desc()).limit(1))
+    tpl = result.scalar_one_or_none()
+    return tpl.content if tpl else None

@@ -23,7 +23,7 @@ class LLMJudge:
             base_url=VLLM_BASE_URL,
             api_key=VLLM_API_KEY,
             temperature=0.0,
-            max_tokens=500
+            max_tokens=7000
         )
 
     def build_prompt(self, trace: Dict[str, Any]) -> str:

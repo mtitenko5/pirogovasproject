@@ -1,182 +1,243 @@
-from fastapi import HTTPException, status, UploadFile
-from typing import List
+from functools import wraps
+from typing import Any, Dict, Optional
+import asyncio
+import json
+import logging
+import os
+import re
+import time
 
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - optional dependency guard
+    def load_dotenv(*args, **kwargs):
+        return None
 
-from app.models.user import User, Organization
-from app.models.report_templates import ReportTemplate
-from app.models.clinical_protocols import ClinicalProtocol
+try:
+    from app.core.config import get_settings
+except ImportError:  # pragma: no cover - allows standalone module checks
+    get_settings = None
 
-from app.schemas.admin import AdminCreateUser, AdminUserOut, AdminUpdateUser
-from app.schemas.report_template import ReportTemplateCreate
-from app.core.security import get_password_hash, verify_password
-from app.core.enum.role import UserRole
-from app.services import storage_service
-from app.core.enum.clinical_protocol_status import ClinicalProtocolStatus
 
-from pathlib import Path
-import tempfile
-from langchain_community.document_loaders import PyPDFLoader
-from app.core.rag.kb_manager import incremental_add_to_kb
+load_dotenv()
 
-async def create_user(db: AsyncSession, user_data: AdminCreateUser) -> User:
-    result = await db.execute(select(User).where(User.login == user_data.login))
-    existing_user = result.scalar_one_or_none()
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Login is already registered"
+settings = get_settings() if get_settings is not None else None
+logger = logging.getLogger(__name__)
+
+
+def _setting(name: str, default: Optional[str] = None) -> Optional[str]:
+    """Read setting from app config first, then from environment."""
+    if settings is not None and hasattr(settings, name):
+        value = getattr(settings, name)
+        if value is not None:
+            return value
+    return os.getenv(name, default)
+
+
+VLLM_BASE_URL = _setting("VLLM_BASE_URL", "http://localhost:8000/v1")
+VLLM_API_KEY = _setting("VLLM_API_KEY", "token-abc123")
+VLLM_MODEL = _setting("VLLM_MODEL", "Qwen/Qwen2.5-0.5B-Instruct")
+
+GUIDELINES_FOR_LLM_TOP_K = 4
+MAX_GUIDELINE_CHARS = 900
+
+
+def track_node_time(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        start = time.perf_counter()
+        result = func(*args, **kwargs)
+        elapsed = time.perf_counter() - start
+        print(f"[{func.__name__}] Выполнено за {elapsed:.3f} сек.")
+        return result
+
+    return wrapper
+
+
+def clean_context_text(text: str) -> str:
+    text = re.sub(r"\s+", " ", text).strip()
+    if len(text) > MAX_GUIDELINE_CHARS:
+        text = text[:MAX_GUIDELINE_CHARS] + "..."
+    return text
+
+
+@track_node_time
+def fuse_context(state: Dict[str, Any]) -> Dict[str, Any]:
+    blocks = []
+    guidelines = state.get("retrieved_guidelines", [])
+    guidelines = sorted(
+        guidelines,
+        key=lambda item: item.get("final_score", item.get("score", 0.0)),
+        reverse=True,
+    )[:GUIDELINES_FOR_LLM_TOP_K]
+
+    for i, item in enumerate(guidelines, start=1):
+        score = item.get("score", item.get("final_score", 0.0))
+        text = clean_context_text(item["text"])
+
+        blocks.append(
+            f"[GUIDELINE {i}]\n"
+            f"Источник: {item['source']}\n"
+            f"Chunk: {item['chunk_id']}\n"
+            f"Score: {score:.4f}\n"
+            f"Текст: {text}"
         )
-    
-    organization_result = await db.execute( select(Organization).where(Organization.name == user_data.organization_name))
-    organization = organization_result.scalar_one_or_none()
-    if not organization:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Organization not found"
-        )
-    
-    hashed_password = get_password_hash(user_data.password)
 
-    new_user = User(
-        login=user_data.login,
-        hashed_password=hashed_password,
-        role = user_data.role,
-        organization_name=user_data.organization_name,
-        name=user_data.name,
-        surname=user_data.surname,
-        patronymic=user_data.patronymic,
-        date_of_birth=user_data.date_of_birth
+    fused_context = (
+        f"Жалобы:\n{state.get('query', '')}\n\n"
+        f"Анамнез:\n{state.get('patient_history', '')}\n\n"
+        f"Контекст из гайдлайнов:\n"
+        + ("\n\n".join(blocks) if blocks else "Ничего не найдено")
     )
 
-    db.add(new_user)
-    await db.commit()
-    await db.refresh(new_user)
-    return new_user
+    return {
+        **state,
+        "fused_context": fused_context,
+    }
 
-async def update_user(db: AsyncSession, user_id: int, user_data: AdminUpdateUser):
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-    
-    if user_data.organization_id:
-        organization_result = await db.execute( select(Organization).where(Organization.id == user_data.organization_id))
-        organization = organization_result.scalar_one_or_none()
-        if not organization:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Organization not found"
-            )
-    
-    if user_data.role == UserRole.USER and user.role == UserRole.ADMIN or user_data.is_active == False and user.role == UserRole.ADMIN:
-        admins = await db.execute(select(User).where(User.role == UserRole.ADMIN))
-        admins = admins.scalars().all()
-        if len(admins) == 1:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only admins can assign admin role"
-            )
-        
-    update_dict = user_data.model_dump(exclude_unset=True)
 
-    for key, value in update_dict.items():
-        setattr(user, key, value)
-    
-    await db.commit()
-    await db.refresh(user)
+def format_patient_data(patient_data: Dict[str, Any]) -> str:
+    if not patient_data:
+        return "Данные пациента не переданы."
+    return json.dumps(patient_data, ensure_ascii=False, indent=2)
 
-    return user
-    
-async def create_report_template(
-    db: AsyncSession,
-    template_data: ReportTemplateCreate,
-    user_id: int,
-) -> ReportTemplate:
-    if template_data.is_active:
-        await db.execute(
-            update(ReportTemplate).values(is_active=False)
-        )
-    
-    template = ReportTemplate(
-        name=template_data.name,
-        version=template_data.version,
-        description=template_data.description,
-        content=template_data.content,
-        is_active=template_data.is_active,
-        created_by_user_id=user_id,
+
+@track_node_time
+def build_prompt(state: Dict[str, Any]) -> Dict[str, Any]:
+    patient_data_text = format_patient_data(state.get("patient_data", {}))
+    prompt = f"""
+Вы — врач-кардиохирург, эксперт в области кардиологии и сосудистой хирургии с 50-летним опытом. Ваша специализация: анализ КТ-ангиографии аорты, оценка аневризм, диссекций и стенозирующих поражений.
+Сформируйте заключение врача-кардиохирурга, основываясь на данных измерений КТ аорты
+Справочные данные и клинические рекомендации, a так же жалобы и анамнез:
+{state.get("fused_context", "")}
+
+Результаты КТ (структурированные данные):
+{patient_data_text}
+
+<rules>
+1. Анализируйте данные ТОЛЬКО на основе предоставленных материалов. Не используйте внешние медицинские базы и не домысливайте значения.Если данных недостаточно, всё равно сохраните раздел и явно напишите, чего не хватает.
+2. Если в данных или контексте отсутствует информация для вывода по конкретному параметру, явно укажите: "Недостаточно данных для оценки [параметр]". Не делайте предположений.
+3. Сопоставляйте измерения из JSON с референсными значениями из контекста. Указывайте единицы измерения и нормативные диапазоны.
+4. Используйте строгую медицинскую терминологию и только медицинские нормы, пороги, показания, противопоказания и тактику.
+<output_format>
+Верните ответ строго в следующей структуре. Не добавляйте вводные/заключительные фразы вне схемы:
+[Ход рассуждений] Клиническая значимость изменений. Оценка рисков (стабильность, прогрессирование, угроза разрыва и т.д.).
+[Сформированное заключение] Предварительный диагноз/статус. Рекомендации по тактике (наблюдение, КТ-контроль через Х мес., консультация, хирургическое/эндоваскулярное лечение).
+</output_format>
+""".strip()
+
+    return {
+        **state,
+        "final_prompt": prompt,
+    }
+
+
+@track_node_time
+def call_local_llm(state: Dict[str, Any]) -> Dict[str, Any]:
+    retrieved = state.get("retrieved_guidelines", [])
+    if not retrieved:
+        return {
+            **state,
+            "raw_llm_output": "Релевантные клинические рекомендации не найдены. Недостаточно данных для анализа.",
+        }
+
+    from langchain_openai import ChatOpenAI
+
+    llm = ChatOpenAI(
+        model=VLLM_MODEL,
+        openai_api_base=VLLM_BASE_URL,
+        openai_api_key=VLLM_API_KEY,
+        temperature=0.5,
+        max_tokens=8000,
     )
 
-    db.add(template)
-    await db.commit()
-    await db.refresh(template)
+    response = llm.invoke(state.get("final_prompt", ""))
+    answer = response.content if hasattr(response, "content") else str(response)
 
-    return template
+    return {
+        **state,
+        "raw_llm_output": answer,
+    }
 
-# async def replace_clinical_protocols(
-#     files: List[UploadFile],
-#     uploaded_by_user_id: int,
-#     db: AsyncSession,
-# ) -> List[ClinicalProtocol]:
-#     old_protocols = (await db.execute(select(ClinicalProtocol))).scalars().all()
-#
-#     for protocol in old_protocols:
-#         if protocol.file_object_key:
-#             await storage_service.delete_object(protocol.file_object_key)
-#         await db.delete(protocol)
-#
-#
-#     created_protocols = []
-#
-#     for file in files:
-#         object_key = await storage_service.upload_file(
-#             file = file,
-#             prefix = "clinical_protocols/",
-#         )
-#
-#         protocol = ClinicalProtocol(
-#             title = file.filename,
-#             file_object_key = object_key,
-#             uploaded_by_user_id = uploaded_by_user_id,
-#             status = ClinicalProtocolStatus.UPLOADED,
-#         )
-#
-#         db.add(protocol)
-#         created_protocols.append(protocol)
-#
-#     await db.commit()
-#
-#     for protocol in created_protocols:
-#         await db.refresh(protocol)
-#
-#     return created_protocols
 
-async def add_clinical_protocols(file: UploadFile, uploaded_by_user_id: int, db: AsyncSession, docs_path: str = "clinical_protocols") -> List[ClinicalProtocol]:
-    new_docs = []
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        if file.content_type != "application/pdf":
-            raise HTTPException(
-                status_code=400,
-                detail=f"{file.filename} is not a PDF file"
-            )
-        tmp_path = Path(tmp_dir) / file.filename
-        content = await file.read()
-        await file.seek(0)
-        tmp_path.write_bytes(content)
-        loader = PyPDFLoader(str(tmp_path))
-        new_docs.extend(loader.load())
+async def process_llm_request(
+    patient_data: dict,
+    medical_text: str,
+    guideline_paths: Optional[list[str]] = None,
+    report_id: Optional[str] = None,
+) -> tuple[dict, dict]:
+    if not guideline_paths:
+        gp = getattr(settings, "GUIDELINE_PATHS", None) if settings is not None else None
+        guideline_paths = [gp] if gp and isinstance(gp, str) else (gp or [])
 
-    incremental_add_to_kb(docs_path, new_docs, use_bm25=True)
+    ml_args = {
+        "query": medical_text.strip(),
+        "patient_history": medical_text.strip(),
+        "patient_data": patient_data,
+        "guideline_paths": guideline_paths,
+        "report_id": report_id,
+    }
 
-    created = []
-    object_key = await storage_service.upload_file(file=file, prefix="clinical_protocols/")
-    protocol = ClinicalProtocol(title=file.filename, file_object_key=object_key, uploaded_by_user_id=uploaded_by_user_id, status=ClinicalProtocolStatus.INDEXED)
-    db.add(protocol)
-    created.append(protocol)
+    try:
+        # Import here to avoid circular import:
+        # ml_engine imports build_prompt/call_local_llm/fuse_context from this module.
+        from app.services.ml_engine import generate_medical_report
 
-    await db.commit()
-    return created
+        llm_response = await asyncio.to_thread(generate_medical_report, **ml_args)
+    except Exception as e:
+        logger.error("LLM/RAG error in process_llm_request: %s", e, exc_info=True)
+        raise
+
+    trace_data = {
+        "model": VLLM_MODEL,
+        "input_keys": list(ml_args.keys()),
+    }
+    return llm_response, trace_data
+    
+"""
+def get_structured_answer(llm_response) -> Dict[str, str]:
+    raw_report = llm_response.get("report", "")
+    if not raw_report:
+        return {"diagnosis": "", "clinical_recommendations": ""}
+
+    #Вырезаем только блок [Заключение]
+    match = re.search(r'\[Заключение\]\s*(.*?)(?=\[|$)', raw_report, re.DOTALL | re.IGNORECASE)
+    conclusion_block = match.group(1).strip() if match else raw_report.strip()
+
+    #Убираем служебный заголовок диагноза
+    conclusion_block = re.sub(r'Предварительный\s+диагноз[/\\]статус:\s*', '', conclusion_block, flags=re.IGNORECASE)
+
+    #Разделяем диагноз и рекомендации по началу нумерованного списка или маркеру
+    rec_start = re.search(r'\n\s*\d+\.\s', conclusion_block)
+    if not rec_start:
+        # Try to find "Рекомендации по тактике:" marker
+        rec_start = re.search(r'Рекомендации\s+по\s+тактике:\s*', conclusion_block, flags=re.IGNORECASE)
+
+    if rec_start:
+        diagnosis = conclusion_block[:rec_start.start()].strip()
+        recommendations = conclusion_block[rec_start.start():].strip()
+        # Remove the leading "Рекомендации по тактике:" marker from recommendations only
+        recommendations = re.sub(r'^Рекомендации\s+по\s+тактике:\s*', '', recommendations, flags=re.IGNORECASE)
+    else:
+        diagnosis = conclusion_block
+        recommendations = ""
+
+    #Удаляем дисклеймер в конце
+    disclaimer = r'(?:^|\n)Заключение\s+носит\s+информационно[ -]аналитический.*?(?:врачом|обследования)\.?'
+    diagnosis = re.sub(disclaimer, '', diagnosis, flags=re.IGNORECASE | re.DOTALL).strip()
+    recommendations = re.sub(disclaimer, '', recommendations, flags=re.IGNORECASE | re.DOTALL).strip()
+
+    #Удаляем ссылки на литературу
+    ref_pattern = r'\[\s*\d+(?:\s*[,\-\s]\s*\d+)*\s*\]'
+    diagnosis = re.sub(ref_pattern, '', diagnosis)
+    recommendations = re.sub(ref_pattern, '', recommendations)
+
+    #Нормализация пробелов
+    diagnosis = re.sub(r'\s+', ' ', diagnosis).strip()
+    recommendations = re.sub(r'\n\s*\n', '\n', recommendations).strip()
+
+    return {
+        "diagnosis": diagnosis, 
+        "clinical_recommendations": recommendations
+        }
+"""
