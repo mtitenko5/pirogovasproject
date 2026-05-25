@@ -2,15 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, status, Form, UploadFile,
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
 
-from sqlalchemy import select, desc
 from app.core.database import get_db
 from app.schemas.admin import AdminCreateUser, AdminUserOut, AdminUpdateUser
 from app.schemas.report_template import ReportTemplateCreate, ReportTemplateOut
-from app.schemas.clinical_protocol import ClinicalProtocolOut
+from app.schemas.clinical_protocol import ClinicalProtocolOut,ClinicalProtocolListItem
 from app.services import admin_service
 from app.api.dependencies import require_admin
 from app.models.user import User
-from app.models.clinical_protocols import ClinicalProtocol
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -72,15 +70,20 @@ async def upload_report_template(
 async def add_clinical_protocols(
     file: UploadFile = File(..., description="PDF file"),
     admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)):
+    db: AsyncSession = Depends(get_db)
+):
     try:
         return await admin_service.add_clinical_protocols(db=db, file=file, uploaded_by_user_id=admin.id, docs_path="clinical_protocols")
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-@router.get("/clinical-protocols", response_model=List[ClinicalProtocolOut], status_code=status.HTTP_200_OK)
+@router.get("/clinical-protocols", response_model=List[ClinicalProtocolListItem], status_code=status.HTTP_200_OK)
 async def get_all_clinical_protocols(db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin)):
+    try:
+        result = await admin_service.get_all_clinical_protocols(db)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
-    stmt = select(ClinicalProtocol).order_by(desc(ClinicalProtocol.uploaded_at))
-    result = await db.execute(stmt)
-    return result.scalars().all()
