@@ -2,7 +2,7 @@ from fastapi import HTTPException, status, UploadFile
 from typing import List
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select, update, desc
 
 from app.models.user import User, Organization
 from app.models.report_templates import ReportTemplate
@@ -180,3 +180,10 @@ async def add_clinical_protocols(file: UploadFile, uploaded_by_user_id: int, db:
 
     await db.commit()
     return created
+
+async def get_all_clinical_protocols(db: AsyncSession) -> List[ClinicalProtocol]:
+    
+    result = await db.execute(
+        select(ClinicalProtocol).order_by(ClinicalProtocol.uploaded_at.desc())
+    )
+    return list(result.scalars().all())
