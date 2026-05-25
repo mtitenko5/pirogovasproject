@@ -2,7 +2,11 @@ from fastapi import HTTPException, status, UploadFile
 from typing import List
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, desc
+from sqlalchemy import select, update, func
+
+from app.models.report import Report
+from app.models.llm_calls import LLMCall
+from app.core.enum.call_type import CallStatus
 
 from app.models.user import User, Organization
 from app.models.report_templates import ReportTemplate
@@ -64,8 +68,8 @@ async def update_user(db: AsyncSession, user_id: int, user_data: AdminUpdateUser
             detail="User not found"
         )
     
-    if user_data.organization_id:
-        organization_result = await db.execute( select(Organization).where(Organization.id == user_data.organization_id))
+    if user_data.organization_name:
+        organization_result = await db.execute( select(Organization).where(Organization.name == user_data.organization_name))
         organization = organization_result.scalar_one_or_none()
         if not organization:
             raise HTTPException(
@@ -187,3 +191,42 @@ async def get_all_clinical_protocols(db: AsyncSession) -> List[ClinicalProtocol]
         select(ClinicalProtocol).order_by(ClinicalProtocol.uploaded_at.desc())
     )
     return list(result.scalars().all())
+
+async def get_all_users(db: AsyncSession) -> List[User]:
+    result = await db.execute(select(User).order_by(User.id))
+    return list(result.scalars().all())
+
+async def get_all_report_templates(db: AsyncSession) -> List[ReportTemplate]:
+    result = await db.execute(select(ReportTemplate).order_by(ReportTemplate.created_at.desc()))
+    return list(result.scalars().all())
+
+async def get_admin_metrics(db: AsyncSession) -> dict:
+    llm_total_result = await db.execute(select(func.count(LLMCall.id)))
+    llm_calls_total = llm_total_result.scalar_one()
+
+    llm_failed_result = await db.execute(
+        select(func.count(LLMCall.id)).where(LLMCall.status == CallStatus.FAILED)
+    )
+    llm_calls_failed = llm_failed_result.scalar_one()
+
+    reviewed_count_result = await db.execute(
+        select(func.count(Report.id)).where(Report.review_score.is_not(None))
+    )
+    reviewed_reports_total = reviewed_count_result.scalar_one()
+
+    avg_review_result = await db.execute(
+        select(func.avg(Report.review_score)).where(Report.review_score.is_not(None))
+    )
+    average_review_score = avg_review_result.scalar_one()
+
+    llm_error_percent = 0.0
+    if llm_calls_total:
+        llm_error_percent = round((llm_calls_failed / llm_calls_total) * 100, 2)
+
+    return {
+        "llm_calls_total": llm_calls_total,
+        "llm_calls_failed": llm_calls_failed,
+        "llm_error_percent": llm_error_percent,
+        "reviewed_reports_total": reviewed_reports_total,
+        "average_review_score": round(float(average_review_score), 2) if average_review_score is not None else None,
+    }

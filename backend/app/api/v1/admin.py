@@ -3,12 +3,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
 
 from app.core.database import get_db
-from app.schemas.admin import AdminCreateUser, AdminUserOut, AdminUpdateUser
+from app.schemas.admin import (
+    AdminCreateUser,
+    AdminUserOut,
+    AdminUpdateUser,
+    AdminMetricsOut,
+)
 from app.schemas.report_template import ReportTemplateCreate, ReportTemplateOut
 from app.schemas.clinical_protocol import ClinicalProtocolOut,ClinicalProtocolListItem
 from app.services import admin_service
 from app.api.dependencies import require_admin
 from app.models.user import User
+
+
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -66,6 +73,21 @@ async def upload_report_template(
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
+# @router.post("/clinical-protocols/replace", response_model=List[ClinicalProtocolOut])
+# async def replace_clinical_protocols(
+#     files: List[UploadFile] = File(...),
+#     admin: User = Depends(require_admin),
+#     db: AsyncSession = Depends(get_db),
+# ):
+#     try:
+#         return await admin_service.replace_clinical_protocols(
+#             db=db,
+#             files=files,
+#             uploaded_by_user_id=admin.id,
+#         )
+#     except Exception as e:
+#         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
 @router.post("/clinical-protocols/add", response_model=List[ClinicalProtocolOut])
 async def add_clinical_protocols(
     file: UploadFile = File(..., description="PDF file"),
@@ -87,3 +109,23 @@ async def get_all_clinical_protocols(db: AsyncSession = Depends(get_db), admin: 
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
+@router.get("/users", response_model=List[AdminUserOut])
+async def get_all_users(
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    return await admin_service.get_all_users(db)
+
+@router.get("/report-templates", response_model=List[ReportTemplateOut])
+async def get_all_report_templates(
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    return await admin_service.get_all_report_templates(db)
+
+@router.get("/metrics", response_model=AdminMetricsOut)
+async def get_metrics(
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    return await admin_service.get_admin_metrics(db)
