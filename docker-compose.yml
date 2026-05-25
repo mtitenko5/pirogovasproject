@@ -44,6 +44,7 @@ services:
       - backend
   
   backend:
+    image: ct_photos_backend:latest
     build: ./backend
     container_name:  ct_photos_backend
     depends_on:
@@ -69,7 +70,7 @@ services:
       - backend
   
   celery_worker:
-    build: ./backend
+    image: ct_photos_backend:latest
     container_name: ct_photos_celery_worker
     command: celery -A app.core.celery_app worker --loglevel=info --concurrency=1
     depends_on:

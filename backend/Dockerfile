@@ -2,11 +2,9 @@ FROM python:3.11-slim-bookworm
 
 WORKDIR /app
 
-RUN apt-get update
-
-RUN apt-get install -y pandoc
-
-RUN apt-get install -y wkhtmltopdf
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pandoc \
+    wkhtmltopdf
 
 COPY requirements.txt .
 
