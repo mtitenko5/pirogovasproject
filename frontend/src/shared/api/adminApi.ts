@@ -130,3 +130,25 @@ export const uploadReportTemplate = (
     body: formData,
   });
 };
+
+export type ClinicalProtocolListItem = {
+  id: number;
+  title: string;
+  status: string;
+  uploaded_at: string;
+};
+
+export const getClinicalProtocols = () => {
+  return apiClient<ClinicalProtocolListItem[]>('/admin/clinical-protocols');
+};
+
+export const uploadClinicalProtocol = async (file: File): Promise<void> => {
+  const formData = new FormData();
+
+  formData.append('file', file);
+
+  await apiClient<unknown>('/admin/clinical-protocols/add', {
+    method: 'POST',
+    body: formData,
+  });
+};

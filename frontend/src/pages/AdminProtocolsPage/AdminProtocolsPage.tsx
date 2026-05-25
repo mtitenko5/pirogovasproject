@@ -1,35 +1,28 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { SearchBar } from '../../shared/ui/SearchBar/SearchBar';
 import { FileInput } from '../../shared/ui/FileInput/FileInput';
 import { Button } from '../../shared/ui/Button/Button';
+import {getClinicalProtocols, uploadClinicalProtocol, type ClinicalProtocolListItem,} from '../../shared/api/adminApi';
 import fileIcon from '../../shared/assets/icons/fileBlueIcon.svg';
 import cls from './AdminProtocolsPage.module.scss';
-
-const mockProtocols = [
-  'Аортальная недостаточность.pdf',
-  'Аортальный стеноз.pdf',
-  'Расслоение аорты_final.pdf',
-  'Расслоение аорты.pdf',
-  'Рекомендации брюшная аорта.pdf',
-  'Рекомендации_торакоабдоминальная_аорта.pdf',
-  'abdominal-aortic-aneurysm.pdf',
-  'etz2015.pdf',
-  'isselbacher_et_al_2022_2022_acc_aha_guideline_for_the_diagnosis.pdf',
-  'jtd-09-05-S551.pdf',
-  'Kardiologiya_2018_01_007.pdf',
-  'Recom po aorte 7_rkj_15.pdf',
-  'recommendation.pdf',
-  'recommendation2.pdf',
-  'rogers2013.pdf',
-  'ziganshin2019.pdf',
-  '158-157-1-PB.pdf',
-  '337-649-1-SM.pdf'
-];
 
 export const AdminProtocolsPage = () => {
   const [searchValue, setSearchValue] = useState('');
   const [files, setFiles] = useState<File[]>([]);
-  const [protocols, setProtocols] = useState<string[]>(mockProtocols);
+  const [protocols, setProtocols] = useState<ClinicalProtocolListItem[]>([]);
+
+  const loadProtocols = useCallback(async () => {
+    try {
+      const data = await getClinicalProtocols();
+      setProtocols(data);
+    } catch {
+      console.log('Не удалось загрузить клинические рекомендации');
+    }
+  }, []);
+
+  useEffect(() => {
+    loadProtocols();
+  }, [loadProtocols]);
 
   const filteredProtocols = useMemo(() => {
     const normalizedSearch = searchValue.trim().toLowerCase();
@@ -39,7 +32,7 @@ export const AdminProtocolsPage = () => {
     }
 
     return protocols.filter((protocol) =>
-      protocol.toLowerCase().includes(normalizedSearch)
+      protocol.title.toLowerCase().includes(normalizedSearch)
     );
   }, [searchValue, protocols]);
 
@@ -47,22 +40,27 @@ export const AdminProtocolsPage = () => {
     console.log('Поиск протокола:', searchValue);
   };
 
-  const handleUpload = () => {
-    if (files.length === 0) {
+  const handleUpload = async () => {
+    const file = files[0];
+
+    if (!file) {
       console.log('Файл протокола не выбран');
       return;
     }
 
-    const uploadedFileNames = files.map((file) => file.name);
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      console.log('Можно загрузить только PDF-файл');
+      return;
+    }
 
-    setProtocols((prevProtocols) => [
-      ...uploadedFileNames,
-      ...prevProtocols,
-    ]);
+    try {
+      await uploadClinicalProtocol(file);
 
-    setFiles([]);
-
-    console.log('Загружены протоколы:', files);
+      setFiles([]);
+      await loadProtocols();
+    } catch {
+      console.log('Не удалось загрузить клинический протокол');
+    }
   };
 
   return (
@@ -80,12 +78,15 @@ export const AdminProtocolsPage = () => {
         <FileInput
           files={files}
           onChange={setFiles}
-          allowedExtensions={['zip', 'rar', '7z']}
-          multiple
-          placeholder="Выберите файл (.zip, .rar, .7z)"
+          allowedExtensions={['pdf']}
+          placeholder="Выберите файл (pdf)"
         />
 
-        <Button type="button" className={cls.uploadButton} onClick={handleUpload}>
+        <Button
+          type="button"
+          className={cls.uploadButton}
+          onClick={handleUpload}
+        >
           Загрузить
         </Button>
       </section>
@@ -94,10 +95,10 @@ export const AdminProtocolsPage = () => {
         <h2 className={cls.subtitle}>Текущие клинические рекомендации</h2>
 
         <ul className={cls.fileList}>
-          {filteredProtocols.map((protocol, index) => (
-            <li key={`${protocol}-${index}`} className={cls.fileItem}>
+          {filteredProtocols.map((protocol) => (
+            <li key={protocol.id} className={cls.fileItem}>
               <img src={fileIcon} alt="" className={cls.protocolIcon} />
-              <span>{protocol}</span>
+              <span>{protocol.title}</span>
             </li>
           ))}
         </ul>
