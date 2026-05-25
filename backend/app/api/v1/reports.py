@@ -78,7 +78,7 @@ async def get_html_report(
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
-# Download PDF report
+# Download PDF report(presigned url) - temporarily not used
 @router.get("/{id_report}/pdf-url")
 async def get_pdf_report_url(
     id_report: str,
@@ -94,6 +94,36 @@ async def get_pdf_report_url(
         
         url = await storage_service.get_presigned_url(report.pdf_object_key)
         return {"url": url}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+@router.get("/{id_report}/pdf")
+async def download_pdf_report(
+    id_report: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        report = await report_service.get_report_by_id(db, id_report)
+        ensure_report_access(current_user, report)
+
+        if not report.pdf_object_key:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="PDF report not found",
+            )
+        
+        pdf_bytes = await storage_service.get_object_bytes(report.pdf_object_key)
+
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attchments; filename="report-{id_report}.pdf"'
+            },
+        )
     except HTTPException:
         raise
     except Exception as e:

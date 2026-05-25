@@ -41,6 +41,7 @@ async def create_queued_report(
         llm_response=None,
         judge_enabled=judge_enabled,
         judge_status="queued" if judge_enabled else None,
+        template_id=template_id,
     )
     db.add(report)
     await db.flush()
@@ -112,6 +113,7 @@ async def render_and_store_report_files(
         data=pdf_content,
         prefix=f"reports/{report.id_report}/result",
         filename="report.pdf",
+        content_type="application/pdf",
     )
 
     report.html_object_key = html_object_key
