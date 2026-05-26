@@ -131,288 +131,89 @@ pirogovasproject/
 │   └── app/
 │       ├── main.py                   # Точка входа FastAPI, подключение роутеров
 │       ├── api/
-│       │   ├── dependencies.py       # Общие зависимости API, проверка ролей
+│       │   ├── dependencies.py       # Общие зависимости API, авторизация и проверка ролей
 │       │   └── v1/
-│       │       ├── admin.py          # Эндпоинты администратора
+│       │       ├── admin.py          # Эндпоинты администратора: пользователи, шаблоны, протоколы, метрики
 │       │       ├── llm.py            # Создание отчета через LLM-пайплайн
-│       │       ├── reports.py        # Получение, генерация и оценка отчетов
-│       │       └── users.py          # Авторизация пользователей
+│       │       ├── reports.py        # Получение, генерация, скачивание и оценка отчетов
+│       │       └── users.py          # Авторизация, регистрация и операции пользователя
 │       ├── core/
-│       │   ├── config.py             # Настройки из .env
-│       │   ├── database.py           # Async SQLAlchemy engine и сессии
+│       │   ├── config.py             # Настройки приложения из .env
+│       │   ├── database.py           # Async SQLAlchemy engine, Base и сессии БД
 │       │   ├── role.py               # Роли пользователей
-│       │   |── security.py           # JWT и пароли
-│       │   |── celery_app.py
-│       │   └── rag/                  
-│       │       ├── chunker.py        # функции чанкования текста
-│       │       ├── embedder.py       # эмбеддинг-кодирование
-│       │       ├── vector_store.py   # организация векторного хранилища
-│       │       ├── bm25_index.py     # индекс bm25 (опционален для подключения)
-│       │       ├── graph_builder.py  # построение графа знаний
-│       │       ├── retriever.py      # гибридный поиск и графовый rag
-│       │       └── kb_manager.py     # управление базой знаний
+│       │   ├── security.py           # JWT, хеширование и проверка паролей
+│       │   ├── celery_app.py         # Конфигурация Celery для фоновых задач генерации отчетов
+│       │   └── rag/
+│       │       ├── chunker.py        # Функции разбиения медицинских текстов на чанки
+│       │       ├── embedder.py       # Эмбеддинг-кодирование текстовых фрагментов
+│       │       ├── vector_store.py   # Организация и поиск по векторному хранилищу
+│       │       ├── bm25_index.py     # BM25-индекс для полнотекстового поиска
+│       │       ├── graph_builder.py  # Построение графа знаний по клиническим протоколам
+│       │       ├── retriever.py      # Гибридный поиск и graph RAG для подбора контекста
+│       │       └── kb_manager.py     # Управление базой знаний и индексацией протоколов
 │       ├── models/
 │       │   ├── report.py             # SQLAlchemy-модель отчета
 │       │   ├── user.py               # SQLAlchemy-модели пользователя и организации
-│       │   ├── clinical_protocols.py
-│       │   ├── llm_calls.py
-│       │   ├── report.py
-│       │   └── report_templates.py
+│       │   ├── clinical_protocols.py # SQLAlchemy-модель клинического протокола
+│       │   ├── llm_calls.py          # SQLAlchemy-модель вызовов LLM и их статусов
+│       │   └── report_templates.py   # SQLAlchemy-модель шаблонов отчетов
 │       ├── schemas/
 │       │   ├── admin.py              # Pydantic-схемы администратора
 │       │   ├── report.py             # Pydantic-схемы отчетов
-│       │   ├── llm.py                       # схема для получения ответа и отправления запроса
-│       │   ├── user.py               # Pydantic-схемы авторизации
-│       │   ├── clinical_protocol.py
-│       │   ├── llm_call.py
-│       │   └── report_template.py
-│       │ 
+│       │   ├── llm.py                # Схемы запроса и ответа для LLM
+│       │   ├── user.py               # Pydantic-схемы авторизации и пользователей
+│       │   ├── clinical_protocol.py  # Pydantic-схемы клинических протоколов
+│       │   ├── llm_call.py           # Pydantic-схемы логирования LLM-вызовов
+│       │   └── report_template.py    # Pydantic-схемы шаблонов отчетов
 │       ├── services/
 │       │   ├── admin_service.py      # Бизнес-логика администратора
 │       │   ├── bootstrap_service.py  # Первичная инициализация данных
-│       │   ├── llm_service.py        # обработка запроса к LLM
-│       │   ├── ml_engine.py          # отправление запроса к LLM и подтаскивание контекста
-│       │   ├── storage_service.py    
+│       │   ├── llm_service.py        # Обработка запроса к LLM
+│       │   ├── ml_engine.py          # Подготовка LLM-запроса и подтягивание контекста
+│       │   ├── storage_service.py    # Работа с файловым хранилищем MinIO
 │       │   ├── report_service.py     # Бизнес-логика отчетов
 │       │   └── user_service.py       # Бизнес-логика пользователей
-│       ├───tasks/
-│       │       report_tasks.py       # 
-│       │       __init__.py
+│       ├── tasks/
+│       │   ├── report_tasks.py       # Celery-задачи фоновой генерации отчетов
+│       │   └── __init__.py           # Инициализация пакета фоновых задач
 │       └── utils/
 │           ├── file_handler.py       # Обработка ZIP, CSV и JSON
-│           ├── html_report_generator.py
-│           └── pdf_generator.py
-├───clinical_protocols #клинические протоколы
-│       158-157-1-PB.pdf
-        ...
-│       Рекомендации_торакоабдоминальная_аорта.pdf
-├───docs # артефакты формирования клиентского пути
-│   ├───endpoints_draft_txt
-│   │       endpoints_api_for_user.txt
-│   │
-│   └───user_actions_draft
-│           1.pdf
-│
-└───frontend
-│    │   .gitignore
-│    │   Dockerfile
-│    │   eslint.config.js
-│    │   index.html
-│    │   package-lock.json
-│    │   package.json
-│    │   README.md
-│    │   tsconfig.app.json
-│    │   tsconfig.json
-│    │   tsconfig.node.json
-│    │   vite.config.ts
-│    │
-│    └───src
-│        │   App.tsx
-│        │   index.css
-│        │   main.tsx
-│        │
-│        ├───app
-│        │   ├───layouts
-│        │   │   └───AdminLayout
-│        │   │           AdminLayout.module.scss
-│        │   │           AdminLayout.tsx
-│        │   │
-│        │   ├───router
-│        │   │       AppRouter.tsx
-│        │   │       ProtectedRoute.tsx
-│        │   │
-│        │   └───styles
-│        │           index.scss
-│        │
-│        ├───entities
-│        │   ├───report
-│        │   │   └───model
-│        │   │           types.ts
-│        │   │
-│        │   └───user
-│        │       └───model
-│        │               types.ts
-│        │
-│        ├───features
-│        │   ├───change-password
-│        │   │       ChangePasswordModal.module.scss
-│        │   │       ChangePasswordModal.tsx
-│        │   │
-│        │   ├───report-review
-│        │   │       ReportReview.module.scss
-│        │   │       ReportReview.tsx
-│        │   │
-│        │   ├───restore-password
-│        │   │       RestorePasswordModal.module.scss
-│        │   │       RestorePasswordModal.tsx
-│        │   │
-│        │   ├───user-form-modal
-│        │   │       UserFormModal.module.scss
-│        │   │       UserFormModal.tsx
-│        │   │
-│        │   └───view-user-modal
-│        │           UserInfoModal.module.scss
-│        │           UserInfoModal.tsx
-│        │
-│        ├───pages
-│        │   ├───AdminDashboardPage
-│        │   │       AdminDashboardPage.module.scss
-│        │   │       AdminDashboardPage.tsx
-│        │   │
-│        │   ├───AdminProtocolsPage
-│        │   │       AdminProtocolsPage.module.scss
-│        │   │       AdminProtocolsPage.tsx
-│        │   │
-│        │   ├───AdminTemplatesPage
-│        │   │       AdminTemplatesPage.module.scss
-│        │   │       AdminTemplatesPage.tsx
-│        │   │
-│        │   ├───AdminUsersPage
-│        │   │       AdminUsersPage.module.scss
-│        │   │       AdminUsersPage.tsx
-│        │   │
-│        │   ├───LoginPage
-│        │   │       LoginPage.module.scss
-│        │   │       LoginPage.tsx
-│        │   │
-│        │   └───MainPage
-│        │           MainPage.module.scss
-│        │           MainPage.tsx
-│        │
-│        ├───shared
-│        │   ├───api
-│        │   │       adminApi.ts
-│        │   │       apiClient.ts
-│        │   │       authApi.ts
-│        │   │       reportApi.ts
-│        │   │       userApi.ts
-│        │   │
-│        │   ├───assets
-│        │   │   ├───fonts
-│        │   │   │   ├───DaysOne
-│        │   │   │   │       DaysOne-Regular.ttf
-│        │   │   │   │
-│        │   │   │   ├───OpenSans
-│        │   │   │   │       OpenSans-Bold.ttf
-│        │   │   │   │       OpenSans-Light.ttf
-│        │   │   │   │       OpenSans-Medium.ttf
-│        │   │   │   │       OpenSans-Regular.ttf
-│        │   │   │   │       OpenSans-SemiBold.ttf
-│        │   │   │   │
-│        │   │   │   └───ViaodaLibre
-│        │   │   │           ViaodaLibre-Regular.ttf
-│        │   │   │
-│        │   │   ├───icons
-│        │   │   │       accountIcon.svg
-│        │   │   │       addIcon.svg
-│        │   │   │       crossIcon.svg
-│        │   │   │       CTReport.svg
-│        │   │   │       deleteIcon.svg
-│        │   │   │       doorIcon.svg
-│        │   │   │       downloadIcon.svg
-│        │   │   │       editIcon.svg
-│        │   │   │       exitIcon.svg
-│        │   │   │       eyeCloseIcon.svg
-│        │   │   │       eyeIcon.svg
-│        │   │   │       fileBlueIcon.svg
-│        │   │   │       fileIcon.svg
-│        │   │   │       heartLogoIcon.svg
-│        │   │   │       homeIcon.svg
-│        │   │   │       infoIcon.svg
-│        │   │   │       lockIcon.svg
-│        │   │   │       logoIcon.svg
-│        │   │   │       logOuIcont.svg
-│        │   │   │       openUserIcon.svg
-│        │   │   │       searchIcon.svg
-│        │   │   │       starEmptyIcon.svg
-│        │   │   │       starFullIcon.svg
-│        │   │   │       tsconfig.app.json
-│        │   │   │       userIcon.svg
-│        │   │   │       userLogoW.svg
-│        │   │   │
-│        │   │   └───images
-│        │   │           bgHomePage.png
-│        │   │
-│        │   ├───lib
-│        │   │       jwt.ts
-│        │   │       tokenStorage.ts
-│        │   │
-│        │   └───ui
-│        │       ├───Button
-│        │       │       Button.module.scss
-│        │       │       Button.tsx
-│        │       │
-│        │       ├───Dropdown
-│        │       │       Dropdown.module.scss
-│        │       │       Dropdown.tsx
-│        │       │
-│        │       ├───FileInput
-│        │       │       FileInput.module.scss
-│        │       │       FileInput.tsx
-│        │       │
-│        │       ├───Input
-│        │       │       Input.module.scss
-│        │       │       Input.tsx
-│        │       │
-│        │       ├───Modal
-│        │       │       Modal.module.scss
-│        │       │       Modal.tsx
-│        │       │
-│        │       ├───Radio
-│        │       │       Radio.module.scss
-│        │       │       Radio.tsx
-│        │       │
-│        │       └───SearchBar
-│        │               SearchBar.module.scss
-│        │               SearchBar.tsx
-│        │
-│        └───widgets
-│            ├───AdminHeader
-│            │       AdminHeader.module.scss
-│            │       AdminHeader.tsx
-│            │
-│            ├───AdminSidebar
-│            │       AdminSidebar.module.scss
-│            │       AdminSidebar.tsx
-│            │
-│            ├───AdminStats
-│            │       AdminStats.module.scss
-│            │       AdminStats.tsx
-│            │
-│            ├───AdminUsersToolbar
-│            │       AdminUsersToolbar.module.scss
-│            │       AdminUsersToolbar.tsx
-│            │
-│            ├───Header
-│            │       Header.module.scss
-│            │       Header.tsx
-│            │
-│            ├───HomeSection
-│            │       HomeSection.module.scss
-│            │       HomeSection.tsx
-│            │
-│            ├───ListOfReports
-│            │       ListOfReports.module.scss
-│            │       ListOfReports.tsx
-│            │
-│            ├───NewReportForm
-│            │       NewReportForm.module.scss
-│            │       NewReportForm.tsx
-│            │
-│            ├───ProfileDropdown
-│            │       ProfileDropdown.module.scss
-│            │       ProfileDropdown.tsx
-│            │
-│            └───UsersTable
-│                    UsersTable.module.scss
-│                    UsersTable.tsx
-│
-├── docs/
+│           ├── html_report_generator.py # Генерация HTML-версии медицинского отчета
+│           └── pdf_generator.py      # Генерация PDF из HTML-отчета
+├── clinical_protocols/               # Клинические протоколы и рекомендации в PDF
+│   ├── 158-157-1-PB.pdf              # Исходный PDF-документ клинического протокола
+│   └── Рекомендации_торакоабдоминальная_аорта.pdf # Рекомендации по торакоабдоминальной аорте
+├── docs/                             # Артефакты формирования клиентского пути
 │   ├── endpoints_draft_txt/          # Черновики API-эндпоинтов
+│   │   └── endpoints_api_for_user.txt # Описание API для пользовательских сценариев
 │   └── user_actions_draft/           # Черновики пользовательских сценариев
+│       └── 1.pdf                     # PDF-схема или описание пользовательского пути
+└── frontend/                         # React + Vite frontend
+    ├── .gitignore                    # Исключения Git для frontend
+    ├── Dockerfile                    # Docker-образ frontend-сервиса
+    ├── eslint.config.js              # Конфигурация ESLint
+    ├── index.html                    # HTML-точка входа Vite
+    ├── package-lock.json             # Зафиксированные версии npm-зависимостей
+    ├── package.json                  # Скрипты и зависимости frontend
+    ├── README.md                     # Описание frontend-проекта
+    ├── tsconfig.app.json             # TypeScript-настройки приложения
+    ├── tsconfig.json                 # Общая TypeScript-конфигурация
+    ├── tsconfig.node.json            # TypeScript-настройки для Node/Vite
+    ├── vite.config.ts                # Конфигурация Vite
+    └── src/
+        ├── App.tsx                   # Корневой компонент приложения
+        ├── index.css                 # Глобальные CSS-стили
+        ├── main.tsx                  # Точка входа React-приложения
+        ├── app/                      # Инициализация приложения, роутинг, layout и стили
+        ├── entities/                 # Доменные типы сущностей: пользователь, отчет
+        ├── features/                 # Самостоятельные пользовательские функции и модальные окна
+        ├── pages/                    # Страницы приложения: вход, главная, admin-разделы
+        ├── shared/                   # Переиспользуемые API-клиенты, UI-компоненты, assets и утилиты
+        └── widgets/                  # Крупные UI-блоки: header, sidebar, таблицы, формы и списки
 ├── .env.example                      # Пример переменных окружения
-├── docker-compose.yml                # PostgreSQL + backend
-├── openapi.json                      # OpenAPI-спецификация
+├── docker-compose.yml                # Запуск PostgreSQL, backend и связанных сервисов
+├── nginx.conf                        # Конфигурация nginx для проксирования frontend/backend
+├── openapi.json                      # OpenAPI-спецификация backend API
 └── Проект Клиники Пирогова.txt       # Текстовое описание проекта
 
 ```
