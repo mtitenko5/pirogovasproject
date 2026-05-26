@@ -187,8 +187,16 @@ async def add_clinical_protocols(file: UploadFile, uploaded_by_user_id: int, db:
     db.add(protocol)
 
     # Step 3: Commit to persist the record
-    await db.commit()
-    await db.refresh(protocol)
+    try:
+        await db.commit()
+        await db.refresh(protocol)
+    except Exception:
+        # Clean up orphaned storage object if database save fails
+        try:
+            await storage_service.delete_file(object_key)
+        except Exception:
+            pass  # Best effort cleanup
+        raise
 
     # Step 4: Index the documents in the knowledge base
     try:

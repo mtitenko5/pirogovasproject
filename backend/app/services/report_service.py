@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import uuid
-from typing import List, Optional
+from typing import List, Optional, Set
 import asyncio
 from langsmith import Client
 import os
@@ -21,6 +21,9 @@ from app.utils.pdf_generator import generate_pdf_from_html
 from app.utils.html_report_generator import generate_html_report
 
 logger = logging.getLogger(__name__)
+
+# Track background feedback tasks to prevent them from being garbage collected
+feedback_tasks: Set[asyncio.Task] = set()
 
 async def create_queued_report(
     db: AsyncSession,
@@ -136,7 +139,9 @@ async def add_review(db: AsyncSession, review: ReportReviewUpdate, id_report: st
     await db.commit()
 
     # Fire-and-forget: send feedback to LangSmith without blocking or failing the endpoint
-    asyncio.create_task(_send_feedback_to_langsmith_wrapper(id_report, review.review_score, review.review_text))
+    task = asyncio.create_task(_send_feedback_to_langsmith_wrapper(id_report, review.review_score, review.review_text))
+    feedback_tasks.add(task)
+    task.add_done_callback(feedback_tasks.discard)
 
 async def _send_feedback_to_langsmith_wrapper(report_id: str, score: int, comment: str):
     """Wrapper to call LangSmith feedback in background without blocking."""
