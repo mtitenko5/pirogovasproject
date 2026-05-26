@@ -14,6 +14,14 @@ from app.models.user import User
 
 router = APIRouter(prefix="/llm", tags=["llm"])
 
+async def cleanup_uploaded_objects(object_keys: list[str]) -> None:
+    """Delete uploaded objects from storage in case of error."""
+    for key in object_keys:
+        try:
+            await storage_service.delete_file(key)
+        except Exception:
+            pass  # Best effort cleanup
+
 @router.post("/create_report", response_model=ReportCreateResponse)
 async def create_report(
         # metadata
@@ -68,22 +76,28 @@ async def create_report(
         }
 
         measurements_dict = file_handler.parse_measurements_file(measurements_bytes, measurements_file.filename)
-        
-        report, llm_call = await report_service.create_queued_report(
-            db=db,
-            measurements=measurements_dict,
-            input_files = input_files,
-            meta = meta,
-            user_id = current_user.id,
-            judge_enabled = enable_llm_judge,
-        )
 
-        generate_report_task.delay(report.id, llm_call.id, enable_llm_judge)
+        uploaded_objects = [ct_images_object_key, measurements_object_key]
 
-        return ReportCreateResponse(
-            id_report=report.id_report,
-            status=report.status,
-        )
+        try:
+            report, llm_call = await report_service.create_queued_report(
+                db=db,
+                measurements=measurements_dict,
+                input_files = input_files,
+                meta = meta,
+                user_id = current_user.id,
+                judge_enabled = enable_llm_judge,
+            )
+
+            generate_report_task.delay(report.id, llm_call.id, enable_llm_judge)
+
+            return ReportCreateResponse(
+                id_report=report.id_report,
+                status=report.status,
+            )
+        except Exception:
+            await cleanup_uploaded_objects(uploaded_objects)
+            raise
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except Exception as e:

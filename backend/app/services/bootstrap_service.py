@@ -121,6 +121,16 @@ async def seed_clinical_protocols(db: AsyncSession) -> None:
         if not pdf_files:
             return
 
+        # Resolve system/admin user ID for uploader
+        admin_result = await db.execute(
+            select(User).where(User.role == UserRole.ADMIN).order_by(User.id).limit(1)
+        )
+        admin_user = admin_result.scalar_one_or_none()
+        if not admin_user:
+            logger.error("No admin user found for seeding clinical protocols. Skipping seed.")
+            return
+
+        uploader_id = admin_user.id
         now = datetime.now(timezone.utc)
         records = []
 
@@ -128,7 +138,7 @@ async def seed_clinical_protocols(db: AsyncSession) -> None:
             title = pdf_path.stem.replace("_", "-").title()
             file_key = f"clinical_protocols/{pdf_path.name}"
             records.append(ClinicalProtocol(title=title, version="1.0", file_object_key=file_key, status=ClinicalProtocolStatus.UPLOADED,
-                                            uploaded_by_user_id=1, uploaded_at=now, updated_at=now))
+                                            uploaded_by_user_id=uploader_id, uploaded_at=now, updated_at=now))
 
         db.add_all(records)
         await db.commit()

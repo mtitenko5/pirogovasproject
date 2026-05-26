@@ -2,12 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
 
 from sqlalchemy.ext.asyncio import AsyncSession
+import logging
 
 from app.schemas.report import ReportsList, ReportReviewUpdate
 from app.services import report_service, storage_service
 from app.core.database import get_db
 from app.api.dependencies import get_current_user, require_admin, ensure_report_access
 from app.models.user import User
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -20,8 +23,11 @@ async def get_id_reports(
     try:
         reports = await report_service.get_reports_by_login(db, login)
         return ReportsList(reports=reports)
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail = str(e))
+        logger.exception("Internal error getting reports by login")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")
 
 @router.get("/my_reports", response_model=ReportsList)
 async def get_my_reports(
@@ -31,9 +37,11 @@ async def get_my_reports(
     try:
         reports = await report_service.get_reports_by_user_id(db, current_user.id)
         return ReportsList(reports=reports)
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail = str(e)
-)
+        logger.exception("Internal error getting user reports")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")
     
 @router.post("/{id_report}/add_review")
 async def add_review(
@@ -50,7 +58,8 @@ async def add_review(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        logger.exception("Internal error adding review")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")
 
 
 # View HTML report
@@ -76,7 +85,8 @@ async def get_html_report(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        logger.exception("Internal error viewing HTML report")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")
 
 # Download PDF report(presigned url) - temporarily not used
 @router.get("/{id_report}/pdf-url")
@@ -97,7 +107,8 @@ async def get_pdf_report_url(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        logger.exception("Internal error getting PDF URL")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")
 
 @router.get("/{id_report}/pdf")
 async def download_pdf_report(
@@ -121,13 +132,14 @@ async def download_pdf_report(
             content=pdf_bytes,
             media_type="application/pdf",
             headers={
-                "Content-Disposition": f'attchments; filename="report-{id_report}.pdf"'
+                "Content-Disposition": f'attachment; filename="report-{id_report}.pdf"'
             },
         )
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        logger.exception("Internal error downloading PDF report")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")
 
 @router.get("/{id_report}/status")
 async def get_report_status(
@@ -149,4 +161,5 @@ async def get_report_status(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        logger.exception("Internal error getting report status")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")

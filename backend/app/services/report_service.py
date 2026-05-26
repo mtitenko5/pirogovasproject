@@ -5,6 +5,7 @@ from typing import List, Optional
 import asyncio
 from langsmith import Client
 import os
+import logging
 
 from app.models.report import Report
 from app.models.user import User
@@ -18,6 +19,8 @@ from app.services import storage_service
 
 from app.utils.pdf_generator import generate_pdf_from_html
 from app.utils.html_report_generator import generate_html_report
+
+logger = logging.getLogger(__name__)
 
 async def create_queued_report(
     db: AsyncSession,
@@ -131,7 +134,16 @@ async def add_review(db: AsyncSession, review: ReportReviewUpdate, id_report: st
     report.review_score = review.review_score
     report.review_text = review.review_text
     await db.commit()
-    await asyncio.to_thread(_send_feedback_to_langsmith, id_report, review.review_score, review.review_text)
+
+    # Fire-and-forget: send feedback to LangSmith without blocking or failing the endpoint
+    asyncio.create_task(_send_feedback_to_langsmith_wrapper(id_report, review.review_score, review.review_text))
+
+async def _send_feedback_to_langsmith_wrapper(report_id: str, score: int, comment: str):
+    """Wrapper to call LangSmith feedback in background without blocking."""
+    try:
+        await asyncio.to_thread(_send_feedback_to_langsmith, report_id, score, comment)
+    except Exception as e:
+        logger.exception(f"Failed to send feedback to LangSmith for report {report_id}: {e}")
 
 def _send_feedback_to_langsmith(report_id: str, score: int, comment: str):
     client = Client()

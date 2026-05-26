@@ -174,16 +174,42 @@ async def add_clinical_protocols(file: UploadFile, uploaded_by_user_id: int, db:
         loader = PyPDFLoader(str(tmp_path))
         new_docs.extend(loader.load())
 
-    incremental_add_to_kb(docs_path, new_docs, use_bm25=True)
-
-    created = []
+    # Step 1: Upload file to storage first
     object_key = await storage_service.upload_file(file=file, prefix="clinical_protocols/")
-    protocol = ClinicalProtocol(title=file.filename, file_object_key=object_key, uploaded_by_user_id=uploaded_by_user_id, status=ClinicalProtocolStatus.INDEXED)
-    db.add(protocol)
-    created.append(protocol)
 
+    # Step 2: Create protocol with PENDING status
+    protocol = ClinicalProtocol(
+        title=file.filename,
+        file_object_key=object_key,
+        uploaded_by_user_id=uploaded_by_user_id,
+        status=ClinicalProtocolStatus.PENDING
+    )
+    db.add(protocol)
+
+    # Step 3: Commit to persist the record
     await db.commit()
-    return created
+    await db.refresh(protocol)
+
+    # Step 4: Index the documents in the knowledge base
+    try:
+        incremental_add_to_kb(docs_path, new_docs, use_bm25=True)
+        # Step 5: Update status to INDEXED after successful indexing
+        protocol.status = ClinicalProtocolStatus.INDEXED
+        await db.commit()
+    except Exception as e:
+        # Rollback: delete uploaded file and set status to FAILED
+        protocol.status = ClinicalProtocolStatus.FAILED
+        await db.commit()
+        try:
+            await storage_service.delete_file(object_key)
+        except Exception:
+            pass  # Best effort cleanup
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to index clinical protocol in knowledge base"
+        ) from e
+
+    return [protocol]
 
 async def get_all_clinical_protocols(db: AsyncSession) -> List[ClinicalProtocol]:
     
