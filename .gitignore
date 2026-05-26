@@ -8,3 +8,6 @@ __pycache__/
 .kb_cache/
 .kb_cache_bm25/
 .kb_cache_graph/
+backend/.cache/huggingface/...
+backend/.cache/
+.cache/

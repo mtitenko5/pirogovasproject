@@ -48,7 +48,11 @@ TRANSLATION_MAP = {
     "area": "Площадь поперечного сечения",
 }
 
-
+def log_step_time(step_name: str, start_time: float) -> float:
+    now = time.perf_counter()
+    print(f"[retrieve_graph_context] {step_name}: {now - start_time:.3f} сек.")
+    return now
+    
 def track_node_time(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
@@ -173,6 +177,27 @@ def route_query_to_clusters(
         clusters.append("general")
 
     return clusters
+    
+def warmup_retriever_models() -> None:
+    print("[warmup] Loading retriever runtime models...")
+
+    # Загружаем embedding model
+    embed_texts(["warmup"], is_query=True)
+
+    # Загружаем cross-encoder
+    get_cross_encoder()
+
+    # Загружаем pymorphy3
+    get_morph()
+
+    print("[warmup] Retriever runtime models loaded.")   
+    
+from celery.signals import worker_process_init
+
+@worker_process_init.connect
+def warmup_worker(**kwargs):
+    from app.core.rag.retriever import warmup_retriever_models
+    warmup_retriever_models()
 
 
 def hybrid_retrieve(query: str, kb: Dict[str, Any], top_k: int) -> List[Dict[str, Any]]:
@@ -357,6 +382,9 @@ def merge_retrieval_results(
 
 @track_node_time
 def retrieve_graph_context(state: Dict[str, Any]) -> Dict[str, Any]:
+    total_start = time.perf_counter()
+    step_start = total_start
+
     try:
         from .kb_manager import KB_CACHE
     except ImportError:
@@ -364,6 +392,8 @@ def retrieve_graph_context(state: Dict[str, Any]) -> Dict[str, Any]:
 
     warnings = list(state.get("warnings", []))
     paths = state.get("guideline_paths", [])
+
+    step_start = log_step_time("import/cache access", step_start)
 
     if not paths:
         return {
@@ -394,6 +424,9 @@ def retrieve_graph_context(state: Dict[str, Any]) -> Dict[str, Any]:
         patient_data=patient_data,
     )
 
+    print(f"[retrieve_graph_context] target_clusters={target_clusters}")
+    step_start = log_step_time("route_query_to_clusters", step_start)
+
     symptom_results = hybrid_retrieve_from_clusters(
         query=symptom_query,
         kb=kb,
@@ -401,12 +434,16 @@ def retrieve_graph_context(state: Dict[str, Any]) -> Dict[str, Any]:
         top_k=SYMPTOM_TOP_K,
     )
 
+    step_start = log_step_time("symptom hybrid retrieve", step_start)
+
     json_query = ""
     keywords_from_json: Set[str] = set()
 
     if patient_data and isinstance(patient_data, dict):
         json_query = _build_json_query(patient_data)
         keywords_from_json = _collect_json_keywords(patient_data)
+
+    step_start = log_step_time("build json query/keywords", step_start)
 
     json_candidates = (
         hybrid_retrieve_from_clusters(
@@ -418,62 +455,30 @@ def retrieve_graph_context(state: Dict[str, Any]) -> Dict[str, Any]:
         if json_query
         else []
     )
+
+    step_start = log_step_time("json hybrid retrieve", step_start)
+
     json_candidates = _apply_json_heuristics(json_candidates, keywords_from_json)
 
-    for candidate in json_candidates:
-        chunk_lower = candidate["text"].lower()
-
-        if any(
-            term in chunk_lower
-            for term in [
-                "норма",
-                "нормаль",
-                "аневризм",
-                "порог",
-                "рекомендуется",
-                "диаметр",
-                "расслоени",
-                "разрыв",
-                "вмешательств",
-                "таблица",
-            ]
-        ):
-            candidate["score"] += 0.20
-
-        if re.search(r"(>=|<=|≤|≥|>|<)\s?\d+[.,]?\d*\s?(мм|см)", chunk_lower):
-            candidate["score"] += 0.25
-
-        if re.search(r"\d+[.,]?\d*\s?(мм|см)", chunk_lower):
-            candidate["score"] += 0.10
-
-    json_candidates = [
-        candidate
-        for candidate in json_candidates
-        if candidate["score"] >= MIN_JSON_RELEVANCE_SCORE
-    ]
-    json_candidates.sort(key=lambda item: item["score"], reverse=True)
-    json_results = json_candidates[:JSON_RESULTS_TOP_K]
-
-    vector_results: List[Dict[str, Any]] = []
-    seen = set()
-    for item in symptom_results + json_results:
-        key = (item["source"], item["chunk_id"])
-        if key not in seen:
-            seen.add(key)
-            vector_results.append(item)
+    step_start = log_step_time("json heuristics", step_start)
 
     graph_results = graph_expand_from_chunks(
-        seed_results=vector_results,
+        seed_results=symptom_results + json_candidates[:JSON_RESULTS_TOP_K],
         kb=kb,
         max_hops=2,
         max_graph_chunks=GRAPH_EXPAND_TOP_K,
     )
 
+    step_start = log_step_time("graph expand", step_start)
+
     final_guidelines = merge_retrieval_results(
-        vector_results=vector_results,
+        vector_results=symptom_results + json_candidates[:JSON_RESULTS_TOP_K],
         graph_results=graph_results,
         final_top_k=FINAL_GUIDELINES_TOP_K,
     )
+
+    step_start = log_step_time("merge results", step_start)
+    log_step_time("TOTAL retrieve_graph_context", total_start)
 
     if not final_guidelines:
         warnings.append("Ретривер не нашёл релевантных фрагментов")

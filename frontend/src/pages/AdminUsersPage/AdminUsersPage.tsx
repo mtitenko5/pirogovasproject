@@ -79,10 +79,11 @@ export const AdminUsersPage = () => {
     }
   };
 
-  const handleDeleteUser = (user: User) => {
-    console.log('Удалить пользователя:', user);
+  const handleDeleteUser = (userToDelete: User) => {
+    setUsers((prevUsers) =>
+      prevUsers.filter((user) => user.id !== userToDelete.id)
+    );
   };
-
   return (
     <div className={cls.page}>
       <AdminUsersToolbar

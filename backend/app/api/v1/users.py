@@ -12,11 +12,12 @@ from app.schemas.user import (
 )
 
 from app.services import user_service
+
 from app.core.database import get_db
 from app.core.security import create_access_token
-from app.api.dependencies import get_current_active_user
 
 from app.models.user import User
+from app.api.dependencies import get_current_active_user
  
 router = APIRouter(prefix="/users", tags=["users"])
    

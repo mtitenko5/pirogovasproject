@@ -139,11 +139,29 @@ export const viewHtmlReport = async (reportId: string) => {
 };
 
 export const openPdfReport = async (reportId: string) => {
-  const data = await apiClient<{ url: string }>(
-    `/reports/${reportId}/pdf-url`
-  );
+  const token = tokenStorage.getToken();
 
-  window.open(data.url, '_blank');
+  const response = await fetch(`${API_URL}/reports/${reportId}/pdf`, {
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error('Не удалось скачать PDF-отчет');
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+
+  link.href = url;
+  link.download = `report-${reportId}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  URL.revokeObjectURL(url);
 };
 interface AddReportReviewPayload {
   review_score: number;

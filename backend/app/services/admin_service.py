@@ -1,22 +1,28 @@
 from fastapi import HTTPException, status, UploadFile
-from typing import List, Optional
+from typing import List
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, func, case
+from sqlalchemy import select, update, func
+
+from app.models.report import Report
+from app.models.llm_calls import LLMCall
+from app.core.enum.call_type import CallStatus
 
 from app.models.user import User, Organization
 from app.models.report_templates import ReportTemplate
 from app.models.clinical_protocols import ClinicalProtocol
-from app.models.report import Report
-from app.models.llm_calls import LLMCall
 
 from app.schemas.admin import AdminCreateUser, AdminUserOut, AdminUpdateUser
 from app.schemas.report_template import ReportTemplateCreate
 from app.core.security import get_password_hash, verify_password
 from app.core.enum.role import UserRole
-from app.core.enum.call_type import CallStatus
 from app.services import storage_service
 from app.core.enum.clinical_protocol_status import ClinicalProtocolStatus
+
+from pathlib import Path
+import tempfile
+from langchain_community.document_loaders import PyPDFLoader
+from app.core.rag.kb_manager import incremental_add_to_kb
 
 async def create_user(db: AsyncSession, user_data: AdminCreateUser) -> User:
     result = await db.execute(select(User).where(User.login == user_data.login))
@@ -115,43 +121,110 @@ async def create_report_template(
 
     return template
 
-async def replace_clinical_protocols(
-    files: List[UploadFile],
-    uploaded_by_user_id: int,
-    db: AsyncSession,
-) -> List[ClinicalProtocol]:
-    old_protocols = (await db.execute(select(ClinicalProtocol))).scalars().all()
+# async def replace_clinical_protocols(
+#     files: List[UploadFile],
+#     uploaded_by_user_id: int,
+#     db: AsyncSession,
+# ) -> List[ClinicalProtocol]:
+#     old_protocols = (await db.execute(select(ClinicalProtocol))).scalars().all()
+#
+#     for protocol in old_protocols:
+#         if protocol.file_object_key:
+#             await storage_service.delete_object(protocol.file_object_key)
+#         await db.delete(protocol)
+#
+#
+#     created_protocols = []
+#
+#     for file in files:
+#         object_key = await storage_service.upload_file(
+#             file = file,
+#             prefix = "clinical_protocols/",
+#         )
+#
+#         protocol = ClinicalProtocol(
+#             title = file.filename,
+#             file_object_key = object_key,
+#             uploaded_by_user_id = uploaded_by_user_id,
+#             status = ClinicalProtocolStatus.UPLOADED,
+#         )
+#
+#         db.add(protocol)
+#         created_protocols.append(protocol)
+#
+#     await db.commit()
+#
+#     for protocol in created_protocols:
+#         await db.refresh(protocol)
+#
+#     return created_protocols
 
-    for protocol in old_protocols:
-        if protocol.file_object_key:
-            await storage_service.delete_object(protocol.file_object_key)
-        await db.delete(protocol)
+async def add_clinical_protocols(file: UploadFile, uploaded_by_user_id: int, db: AsyncSession, docs_path: str = "clinical_protocols") -> List[ClinicalProtocol]:
+    new_docs = []
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        if file.content_type != "application/pdf":
+            raise HTTPException(
+                status_code=400,
+                detail=f"{file.filename} is not a PDF file"
+            )
+        tmp_path = Path(tmp_dir) / file.filename
+        content = await file.read()
+        await file.seek(0)
+        tmp_path.write_bytes(content)
+        loader = PyPDFLoader(str(tmp_path))
+        new_docs.extend(loader.load())
 
+    # Step 1: Upload file to storage first
+    object_key = await storage_service.upload_file(file=file, prefix="clinical_protocols/")
 
-    created_protocols = []
+    # Step 2: Create protocol with PENDING status
+    protocol = ClinicalProtocol(
+        title=file.filename,
+        file_object_key=object_key,
+        uploaded_by_user_id=uploaded_by_user_id,
+        status=ClinicalProtocolStatus.PENDING
+    )
+    db.add(protocol)
 
-    for file in files:
-        object_key = await storage_service.upload_file(
-            file = file,
-            prefix = "clinical_protocols/",
-        )
-
-        protocol = ClinicalProtocol(
-            title = file.filename,
-            file_object_key = object_key,
-            uploaded_by_user_id = uploaded_by_user_id,
-            status = ClinicalProtocolStatus.UPLOADED,
-        )
-
-        db.add(protocol)
-        created_protocols.append(protocol)
-
-    await db.commit()
-
-    for protocol in created_protocols:
+    # Step 3: Commit to persist the record
+    try:
+        await db.commit()
         await db.refresh(protocol)
+    except Exception:
+        # Clean up orphaned storage object if database save fails
+        try:
+            await storage_service.delete_file(object_key)
+        except Exception:
+            pass  # Best effort cleanup
+        raise
+
+    # Step 4: Index the documents in the knowledge base
+    try:
+        incremental_add_to_kb(docs_path, new_docs, use_bm25=True)
+        # Step 5: Update status to INDEXED after successful indexing
+        protocol.status = ClinicalProtocolStatus.INDEXED
+        await db.commit()
+    except Exception as e:
+        # Rollback: delete uploaded file and set status to FAILED
+        protocol.status = ClinicalProtocolStatus.FAILED
+        await db.commit()
+        try:
+            await storage_service.delete_file(object_key)
+        except Exception:
+            pass  # Best effort cleanup
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to index clinical protocol in knowledge base"
+        ) from e
+
+    return [protocol]
+
+async def get_all_clinical_protocols(db: AsyncSession) -> List[ClinicalProtocol]:
     
-    return created_protocols
+    result = await db.execute(
+        select(ClinicalProtocol).order_by(ClinicalProtocol.uploaded_at.desc())
+    )
+    return list(result.scalars().all())
 
 async def get_all_users(db: AsyncSession) -> List[User]:
     result = await db.execute(select(User).order_by(User.id))

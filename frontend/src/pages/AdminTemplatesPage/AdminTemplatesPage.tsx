@@ -49,7 +49,7 @@ export const AdminTemplatesPage = () => {
       file,
       file.name,
       getCurrentDate(),
-      false
+      true
     );
 
     setVersions((prevVersions) => [

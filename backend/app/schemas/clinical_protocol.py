@@ -18,3 +18,11 @@ class ClinicalProtocolOut(ClinicalProtocolCreate):
     indexed_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+class ClinicalProtocolListItem(BaseModel):
+    id: int
+    title: str
+    status: ClinicalProtocolStatus
+    uploaded_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

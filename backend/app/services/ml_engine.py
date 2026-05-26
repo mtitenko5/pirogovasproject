@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Dict, List, TypedDict
+from typing import Any, Dict, List, TypedDict, Optional
 import json
 import logging
 import uuid
@@ -7,7 +7,7 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import InMemorySaver
 
 from app.core.rag.kb_manager import ingest_request, initialize_kb
-from app.services.llm_service import build_prompt, call_local_llm, fuse_context, get_structured_answer
+from app.services.llm_service import build_prompt, call_local_llm, fuse_context
 from app.core.rag.retriever import retrieve_graph_context
 
 logger = logging.getLogger(__name__)
@@ -25,8 +25,8 @@ class MedGraphState(TypedDict, total=False):
     final_prompt: str
     raw_llm_output: str
     chunks_count: int
-    diagnosis: str
-    clinical_recommendations: str 
+    #diagnosis: str
+    #clinical_recommendations: str 
     
 def configure_logging(level: int = logging.INFO) -> None:
     """
@@ -62,7 +62,6 @@ def build_graph():
     builder.add_node("fuse_context", fuse_context)
     builder.add_node("build_prompt", build_prompt)
     builder.add_node("call_local_llm", call_local_llm)
-    builder.add_node("get_structured_answer", get_structured_answer)
 
     builder.add_edge(START, "validate_input")
     builder.add_edge("validate_input", "ingest_request")             
@@ -71,8 +70,7 @@ def build_graph():
     builder.add_edge("retrieve_graph_context", "fuse_context")
     builder.add_edge("fuse_context", "build_prompt")
     builder.add_edge("build_prompt", "call_local_llm")
-    builder.add_edge("call_local_llm", "get_structured_answer")
-    builder.add_edge("get_structured_answer", END)
+    builder.add_edge("call_local_llm", END)
 
     return builder.compile(checkpointer=InMemorySaver())
 
@@ -114,18 +112,18 @@ def export_langsmith_runs(
     
 graph = build_graph()
 
-def generate_medical_report(query: str, patient_history: str, patient_data: dict, guideline_paths: list[str]) -> Dict[str, Any]:
-    thread_id = f"api-{uuid.uuid4()}"
+def generate_medical_report(query: str, patient_history: str, patient_data: dict, guideline_paths: list[str], report_id: Optional[str] = None) -> Dict[str, Any]:
     initial_state: MedGraphState = {
         "query": query,
         "patient_history": patient_history,
         "guideline_paths": guideline_paths,
         "patient_data": patient_data,
+        "thread_id": f"api-{uuid.uuid4()}",
         "warnings": [],
         "errors": [],
     }
 
-    config = {"configurable": {"thread_id": thread_id}}
+    config = {"configurable": {"thread_id": "api-request"}, "metadata": {"report_id": report_id}}
     result = graph.invoke(initial_state, config=config)
 
     return {
