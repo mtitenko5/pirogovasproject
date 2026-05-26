@@ -142,6 +142,7 @@ pirogovasproject/
 │       │   ├── database.py           # Async SQLAlchemy engine и сессии
 │       │   ├── role.py               # Роли пользователей
 │       │   |── security.py           # JWT и пароли
+│       │   |── celery_app.py
 │       │   └── rag/                  
 │       │       ├── chunker.py        # функции чанкования текста
 │       │       ├── embedder.py       # эмбеддинг-кодирование
@@ -152,51 +153,40 @@ pirogovasproject/
 │       │       └── kb_manager.py     # управление базой знаний
 │       ├── models/
 │       │   ├── report.py             # SQLAlchemy-модель отчета
-│       │   └── user.py               # SQLAlchemy-модели пользователя и организации
+│       │   ├── user.py               # SQLAlchemy-модели пользователя и организации
+│       │   ├── clinical_protocols.py
+│       │   ├── llm_calls.py
+│       │   ├── report.py
+│       │   └── report_templates.py
 │       ├── schemas/
 │       │   ├── admin.py              # Pydantic-схемы администратора
 │       │   ├── report.py             # Pydantic-схемы отчетов
 │       │   ├── llm.py                       # схема для получения ответа и отправления запроса
-│       │   └── user.py               # Pydantic-схемы авторизации
+│       │   ├── user.py               # Pydantic-схемы авторизации
+│       │   ├── clinical_protocol.py
+│       │   ├── llm_call.py
+│       │   └── report_template.py
+│       │ 
 │       ├── services/
 │       │   ├── admin_service.py      # Бизнес-логика администратора
 │       │   ├── bootstrap_service.py  # Первичная инициализация данных
 │       │   ├── llm_service.py        # обработка запроса к LLM
 │       │   ├── ml_engine.py          # отправление запроса к LLM и подтаскивание контекста
+│       │   ├── storage_service.py    
 │       │   ├── report_service.py     # Бизнес-логика отчетов
 │       │   └── user_service.py       # Бизнес-логика пользователей
+│       ├───tasks/
+│       │       report_tasks.py       # 
+│       │       __init__.py
 │       └── utils/
 │           ├── file_handler.py       # Обработка ZIP, CSV и JSON
 │           ├── html_report_generator.py
 │           └── pdf_generator.py
-├── docs/
-│   ├── endpoints_draft_txt/          # Черновики API-эндпоинтов
-│   └── user_actions_draft/           # Черновики пользовательских сценариев
-├── .env.example                      # Пример переменных окружения
-├── docker-compose.yml                # PostgreSQL + backend
-├── openapi.json                      # OpenAPI-спецификация
-└── Проект Клиники Пирогова.txt       # Текстовое описание проекта
-├───clinical_protocols
+├───clinical_protocols #клинические протоколы
 │       158-157-1-PB.pdf
-│       337-649-1-SM.pdf
-│       abdominal-aortic-aneurysm.pdf
-│       etz2015.pdf
-│       isselbacher_et_al_2022_2022_acc_aha_guideline_for_the_diagnosis.pdf
-│       jtd-09-05-S551.pdf
-│       Kardiologiya_2018_01_007.pdf
-│       Recom po aorte 7_rkj_15.pdf
-│       recommendation.pdf
-│       recommendation2.pdf
-│       rogers2013.pdf
-│       ziganshin2019.pdf
-│       Аортальная недостаточность.pdf
-│       Аортальный стеноз.pdf
-│       Расслоение аорты.pdf
-│       Расслоение аорты_final.pdf
-│       Рекомендации брюшная аорта.pdf
+        ...
 │       Рекомендации_торакоабдоминальная_аорта.pdf
-│
-├───docs
+├───docs # артефакты формирования клиентского пути
 │   ├───endpoints_draft_txt
 │   │       endpoints_api_for_user.txt
 │   │
@@ -416,6 +406,14 @@ pirogovasproject/
             └───UsersTable
                     UsersTable.module.scss
                     UsersTable.tsx
+│
+├── docs/
+│   ├── endpoints_draft_txt/          # Черновики API-эндпоинтов
+│   └── user_actions_draft/           # Черновики пользовательских сценариев
+├── .env.example                      # Пример переменных окружения
+├── docker-compose.yml                # PostgreSQL + backend
+├── openapi.json                      # OpenAPI-спецификация
+└── Проект Клиники Пирогова.txt       # Текстовое описание проекта
 
 ```
 
