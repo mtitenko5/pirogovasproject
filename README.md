@@ -4,7 +4,7 @@
 
 ## О проекте
 
-**CT Report** — это backend-сервис на FastAPI, который принимает от пользователя архив с изображениями КТ, файл измерений и метаданные пациента, после чего сохраняет данные отчета в PostgreSQL и готовит основу для генерации медицинского заключения. Генерация текста отчета вынесена в LLM-сервис, а формирование HTML/PDF предусмотрено отдельными утилитами.
+**CT Report Service** — это backend-сервис на FastAPI, который принимает от пользователя архив с изображениями КТ, файл измерений и метаданные пациента, после чего сохраняет данные отчета в PostgreSQL и готовит основу для генерации медицинского заключения. Генерация текста отчета вынесена в LLM-сервис, а формирование HTML/PDF предусмотрено отдельными утилитами.
 
 Проект сейчас находится на стадии backend-прототипа: реализованы API-слой, модели БД, схемы, сервисы пользователей/администратора/отчетов и Docker Compose для запуска приложения с PostgreSQL.
 
@@ -194,218 +194,218 @@ pirogovasproject/
 │           1.pdf
 │
 └───frontend
-    │   .gitignore
-    │   Dockerfile
-    │   eslint.config.js
-    │   index.html
-    │   package-lock.json
-    │   package.json
-    │   README.md
-    │   tsconfig.app.json
-    │   tsconfig.json
-    │   tsconfig.node.json
-    │   vite.config.ts
-    │
-    └───src
-        │   App.tsx
-        │   index.css
-        │   main.tsx
-        │
-        ├───app
-        │   ├───layouts
-        │   │   └───AdminLayout
-        │   │           AdminLayout.module.scss
-        │   │           AdminLayout.tsx
-        │   │
-        │   ├───router
-        │   │       AppRouter.tsx
-        │   │       ProtectedRoute.tsx
-        │   │
-        │   └───styles
-        │           index.scss
-        │
-        ├───entities
-        │   ├───report
-        │   │   └───model
-        │   │           types.ts
-        │   │
-        │   └───user
-        │       └───model
-        │               types.ts
-        │
-        ├───features
-        │   ├───change-password
-        │   │       ChangePasswordModal.module.scss
-        │   │       ChangePasswordModal.tsx
-        │   │
-        │   ├───report-review
-        │   │       ReportReview.module.scss
-        │   │       ReportReview.tsx
-        │   │
-        │   ├───restore-password
-        │   │       RestorePasswordModal.module.scss
-        │   │       RestorePasswordModal.tsx
-        │   │
-        │   ├───user-form-modal
-        │   │       UserFormModal.module.scss
-        │   │       UserFormModal.tsx
-        │   │
-        │   └───view-user-modal
-        │           UserInfoModal.module.scss
-        │           UserInfoModal.tsx
-        │
-        ├───pages
-        │   ├───AdminDashboardPage
-        │   │       AdminDashboardPage.module.scss
-        │   │       AdminDashboardPage.tsx
-        │   │
-        │   ├───AdminProtocolsPage
-        │   │       AdminProtocolsPage.module.scss
-        │   │       AdminProtocolsPage.tsx
-        │   │
-        │   ├───AdminTemplatesPage
-        │   │       AdminTemplatesPage.module.scss
-        │   │       AdminTemplatesPage.tsx
-        │   │
-        │   ├───AdminUsersPage
-        │   │       AdminUsersPage.module.scss
-        │   │       AdminUsersPage.tsx
-        │   │
-        │   ├───LoginPage
-        │   │       LoginPage.module.scss
-        │   │       LoginPage.tsx
-        │   │
-        │   └───MainPage
-        │           MainPage.module.scss
-        │           MainPage.tsx
-        │
-        ├───shared
-        │   ├───api
-        │   │       adminApi.ts
-        │   │       apiClient.ts
-        │   │       authApi.ts
-        │   │       reportApi.ts
-        │   │       userApi.ts
-        │   │
-        │   ├───assets
-        │   │   ├───fonts
-        │   │   │   ├───DaysOne
-        │   │   │   │       DaysOne-Regular.ttf
-        │   │   │   │
-        │   │   │   ├───OpenSans
-        │   │   │   │       OpenSans-Bold.ttf
-        │   │   │   │       OpenSans-Light.ttf
-        │   │   │   │       OpenSans-Medium.ttf
-        │   │   │   │       OpenSans-Regular.ttf
-        │   │   │   │       OpenSans-SemiBold.ttf
-        │   │   │   │
-        │   │   │   └───ViaodaLibre
-        │   │   │           ViaodaLibre-Regular.ttf
-        │   │   │
-        │   │   ├───icons
-        │   │   │       accountIcon.svg
-        │   │   │       addIcon.svg
-        │   │   │       crossIcon.svg
-        │   │   │       CTReport.svg
-        │   │   │       deleteIcon.svg
-        │   │   │       doorIcon.svg
-        │   │   │       downloadIcon.svg
-        │   │   │       editIcon.svg
-        │   │   │       exitIcon.svg
-        │   │   │       eyeCloseIcon.svg
-        │   │   │       eyeIcon.svg
-        │   │   │       fileBlueIcon.svg
-        │   │   │       fileIcon.svg
-        │   │   │       heartLogoIcon.svg
-        │   │   │       homeIcon.svg
-        │   │   │       infoIcon.svg
-        │   │   │       lockIcon.svg
-        │   │   │       logoIcon.svg
-        │   │   │       logOuIcont.svg
-        │   │   │       openUserIcon.svg
-        │   │   │       searchIcon.svg
-        │   │   │       starEmptyIcon.svg
-        │   │   │       starFullIcon.svg
-        │   │   │       tsconfig.app.json
-        │   │   │       userIcon.svg
-        │   │   │       userLogoW.svg
-        │   │   │
-        │   │   └───images
-        │   │           bgHomePage.png
-        │   │
-        │   ├───lib
-        │   │       jwt.ts
-        │   │       tokenStorage.ts
-        │   │
-        │   └───ui
-        │       ├───Button
-        │       │       Button.module.scss
-        │       │       Button.tsx
-        │       │
-        │       ├───Dropdown
-        │       │       Dropdown.module.scss
-        │       │       Dropdown.tsx
-        │       │
-        │       ├───FileInput
-        │       │       FileInput.module.scss
-        │       │       FileInput.tsx
-        │       │
-        │       ├───Input
-        │       │       Input.module.scss
-        │       │       Input.tsx
-        │       │
-        │       ├───Modal
-        │       │       Modal.module.scss
-        │       │       Modal.tsx
-        │       │
-        │       ├───Radio
-        │       │       Radio.module.scss
-        │       │       Radio.tsx
-        │       │
-        │       └───SearchBar
-        │               SearchBar.module.scss
-        │               SearchBar.tsx
-        │
-        └───widgets
-            ├───AdminHeader
-            │       AdminHeader.module.scss
-            │       AdminHeader.tsx
-            │
-            ├───AdminSidebar
-            │       AdminSidebar.module.scss
-            │       AdminSidebar.tsx
-            │
-            ├───AdminStats
-            │       AdminStats.module.scss
-            │       AdminStats.tsx
-            │
-            ├───AdminUsersToolbar
-            │       AdminUsersToolbar.module.scss
-            │       AdminUsersToolbar.tsx
-            │
-            ├───Header
-            │       Header.module.scss
-            │       Header.tsx
-            │
-            ├───HomeSection
-            │       HomeSection.module.scss
-            │       HomeSection.tsx
-            │
-            ├───ListOfReports
-            │       ListOfReports.module.scss
-            │       ListOfReports.tsx
-            │
-            ├───NewReportForm
-            │       NewReportForm.module.scss
-            │       NewReportForm.tsx
-            │
-            ├───ProfileDropdown
-            │       ProfileDropdown.module.scss
-            │       ProfileDropdown.tsx
-            │
-            └───UsersTable
-                    UsersTable.module.scss
-                    UsersTable.tsx
+│    │   .gitignore
+│    │   Dockerfile
+│    │   eslint.config.js
+│    │   index.html
+│    │   package-lock.json
+│    │   package.json
+│    │   README.md
+│    │   tsconfig.app.json
+│    │   tsconfig.json
+│    │   tsconfig.node.json
+│    │   vite.config.ts
+│    │
+│    └───src
+│        │   App.tsx
+│        │   index.css
+│        │   main.tsx
+│        │
+│        ├───app
+│        │   ├───layouts
+│        │   │   └───AdminLayout
+│        │   │           AdminLayout.module.scss
+│        │   │           AdminLayout.tsx
+│        │   │
+│        │   ├───router
+│        │   │       AppRouter.tsx
+│        │   │       ProtectedRoute.tsx
+│        │   │
+│        │   └───styles
+│        │           index.scss
+│        │
+│        ├───entities
+│        │   ├───report
+│        │   │   └───model
+│        │   │           types.ts
+│        │   │
+│        │   └───user
+│        │       └───model
+│        │               types.ts
+│        │
+│        ├───features
+│        │   ├───change-password
+│        │   │       ChangePasswordModal.module.scss
+│        │   │       ChangePasswordModal.tsx
+│        │   │
+│        │   ├───report-review
+│        │   │       ReportReview.module.scss
+│        │   │       ReportReview.tsx
+│        │   │
+│        │   ├───restore-password
+│        │   │       RestorePasswordModal.module.scss
+│        │   │       RestorePasswordModal.tsx
+│        │   │
+│        │   ├───user-form-modal
+│        │   │       UserFormModal.module.scss
+│        │   │       UserFormModal.tsx
+│        │   │
+│        │   └───view-user-modal
+│        │           UserInfoModal.module.scss
+│        │           UserInfoModal.tsx
+│        │
+│        ├───pages
+│        │   ├───AdminDashboardPage
+│        │   │       AdminDashboardPage.module.scss
+│        │   │       AdminDashboardPage.tsx
+│        │   │
+│        │   ├───AdminProtocolsPage
+│        │   │       AdminProtocolsPage.module.scss
+│        │   │       AdminProtocolsPage.tsx
+│        │   │
+│        │   ├───AdminTemplatesPage
+│        │   │       AdminTemplatesPage.module.scss
+│        │   │       AdminTemplatesPage.tsx
+│        │   │
+│        │   ├───AdminUsersPage
+│        │   │       AdminUsersPage.module.scss
+│        │   │       AdminUsersPage.tsx
+│        │   │
+│        │   ├───LoginPage
+│        │   │       LoginPage.module.scss
+│        │   │       LoginPage.tsx
+│        │   │
+│        │   └───MainPage
+│        │           MainPage.module.scss
+│        │           MainPage.tsx
+│        │
+│        ├───shared
+│        │   ├───api
+│        │   │       adminApi.ts
+│        │   │       apiClient.ts
+│        │   │       authApi.ts
+│        │   │       reportApi.ts
+│        │   │       userApi.ts
+│        │   │
+│        │   ├───assets
+│        │   │   ├───fonts
+│        │   │   │   ├───DaysOne
+│        │   │   │   │       DaysOne-Regular.ttf
+│        │   │   │   │
+│        │   │   │   ├───OpenSans
+│        │   │   │   │       OpenSans-Bold.ttf
+│        │   │   │   │       OpenSans-Light.ttf
+│        │   │   │   │       OpenSans-Medium.ttf
+│        │   │   │   │       OpenSans-Regular.ttf
+│        │   │   │   │       OpenSans-SemiBold.ttf
+│        │   │   │   │
+│        │   │   │   └───ViaodaLibre
+│        │   │   │           ViaodaLibre-Regular.ttf
+│        │   │   │
+│        │   │   ├───icons
+│        │   │   │       accountIcon.svg
+│        │   │   │       addIcon.svg
+│        │   │   │       crossIcon.svg
+│        │   │   │       CTReport.svg
+│        │   │   │       deleteIcon.svg
+│        │   │   │       doorIcon.svg
+│        │   │   │       downloadIcon.svg
+│        │   │   │       editIcon.svg
+│        │   │   │       exitIcon.svg
+│        │   │   │       eyeCloseIcon.svg
+│        │   │   │       eyeIcon.svg
+│        │   │   │       fileBlueIcon.svg
+│        │   │   │       fileIcon.svg
+│        │   │   │       heartLogoIcon.svg
+│        │   │   │       homeIcon.svg
+│        │   │   │       infoIcon.svg
+│        │   │   │       lockIcon.svg
+│        │   │   │       logoIcon.svg
+│        │   │   │       logOuIcont.svg
+│        │   │   │       openUserIcon.svg
+│        │   │   │       searchIcon.svg
+│        │   │   │       starEmptyIcon.svg
+│        │   │   │       starFullIcon.svg
+│        │   │   │       tsconfig.app.json
+│        │   │   │       userIcon.svg
+│        │   │   │       userLogoW.svg
+│        │   │   │
+│        │   │   └───images
+│        │   │           bgHomePage.png
+│        │   │
+│        │   ├───lib
+│        │   │       jwt.ts
+│        │   │       tokenStorage.ts
+│        │   │
+│        │   └───ui
+│        │       ├───Button
+│        │       │       Button.module.scss
+│        │       │       Button.tsx
+│        │       │
+│        │       ├───Dropdown
+│        │       │       Dropdown.module.scss
+│        │       │       Dropdown.tsx
+│        │       │
+│        │       ├───FileInput
+│        │       │       FileInput.module.scss
+│        │       │       FileInput.tsx
+│        │       │
+│        │       ├───Input
+│        │       │       Input.module.scss
+│        │       │       Input.tsx
+│        │       │
+│        │       ├───Modal
+│        │       │       Modal.module.scss
+│        │       │       Modal.tsx
+│        │       │
+│        │       ├───Radio
+│        │       │       Radio.module.scss
+│        │       │       Radio.tsx
+│        │       │
+│        │       └───SearchBar
+│        │               SearchBar.module.scss
+│        │               SearchBar.tsx
+│        │
+│        └───widgets
+│            ├───AdminHeader
+│            │       AdminHeader.module.scss
+│            │       AdminHeader.tsx
+│            │
+│            ├───AdminSidebar
+│            │       AdminSidebar.module.scss
+│            │       AdminSidebar.tsx
+│            │
+│            ├───AdminStats
+│            │       AdminStats.module.scss
+│            │       AdminStats.tsx
+│            │
+│            ├───AdminUsersToolbar
+│            │       AdminUsersToolbar.module.scss
+│            │       AdminUsersToolbar.tsx
+│            │
+│            ├───Header
+│            │       Header.module.scss
+│            │       Header.tsx
+│            │
+│            ├───HomeSection
+│            │       HomeSection.module.scss
+│            │       HomeSection.tsx
+│            │
+│            ├───ListOfReports
+│            │       ListOfReports.module.scss
+│            │       ListOfReports.tsx
+│            │
+│            ├───NewReportForm
+│            │       NewReportForm.module.scss
+│            │       NewReportForm.tsx
+│            │
+│            ├───ProfileDropdown
+│            │       ProfileDropdown.module.scss
+│            │       ProfileDropdown.tsx
+│            │
+│            └───UsersTable
+│                    UsersTable.module.scss
+│                    UsersTable.tsx
 │
 ├── docs/
 │   ├── endpoints_draft_txt/          # Черновики API-эндпоинтов
