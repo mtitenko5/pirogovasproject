@@ -51,7 +51,8 @@ async def _generate_report(report_id: int,
 
             llm_response, trace_data = await llm_service.process_llm_request(
                 patient_data=report.measurements,
-                medical_text=report.meta.get("anamnesis", "")
+                medical_text=report.meta.get("anamnesis", ""),
+                report_id=report.id_report,
             )
 
             trace_data.update({
@@ -63,6 +64,10 @@ async def _generate_report(report_id: int,
             has_errors = bool(trace_data.get("errors"))
 
             report.llm_response = llm_response.get("report")
+            report.meta = {
+                **(report.meta or {}),
+                "guideline_sources": llm_response.get("guideline_sources", []),
+            }
 
             llm_call.output_json = llm_response
             llm_call.trace_json = trace_data

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, File, UploadFile, Depends, HTTPException, status, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import date
+from typing import List
 
 from app.schemas.report import ReportCreateResponse
 from app.core.enum.report_status import ReportStatus
@@ -18,7 +19,7 @@ async def cleanup_uploaded_objects(object_keys: list[str]) -> None:
     """Delete uploaded objects from storage in case of error."""
     for key in object_keys:
         try:
-            await storage_service.delete_file(key)
+            await storage_service.delete_object(key)
         except Exception:
             pass  # Best effort cleanup
 
@@ -32,7 +33,7 @@ async def create_report(
         medical_text: str = Form("", description="Medical history + symptoms"),
         enable_llm_judge: bool = Form(False, description="Run LLM-as-judge after report generation"),
         # files
-        ct_images: UploadFile = File(..., description="ZIP archive with CT images"),
+        ct_images: List[UploadFile] = File(..., description="ZIP archive or CT images"),
         measurements_file: UploadFile = File(..., description="Measurements file (CSV/JSON)"),
         current_user: User = Depends(get_current_user),
         db: AsyncSession = Depends(get_db)
@@ -46,10 +47,45 @@ async def create_report(
             "anamnesis": medical_text
         }
 
-        ct_images_object_key = await storage_service.upload_file(
-            file=ct_images,
-            prefix=f"reports/{current_user.id}/ct_images",
-        )
+        ct_image_entries = []
+
+        for uploaded_file in ct_images:
+            file_bytes = await uploaded_file.read()
+            filename = uploaded_file.filename or "ct_image"
+
+            if filename.lower().endswith(".zip"):
+                extracted_images = file_handler.extract_images_from_zip(file_bytes, filename)
+
+                for image in extracted_images:
+                    object_key = storage_service.build_object_key(
+                        prefix=f"reports/{current_user.id}/ct_images",
+                        filename=image["filename"],
+                    )
+                    await storage_service.upload_bytes(
+                        data=image["bytes"],
+                        object_key=object_key,
+                        content_type=image["content_type"],
+                    )
+                    ct_image_entries.append({
+                        "filename": image["filename"],
+                        "object_key": object_key,
+                        "content_type": image["content_type"],
+                    })
+            else:
+                object_key = storage_service.build_object_key(
+                    prefix=f"reports/{current_user.id}/ct_images",
+                    filename=filename,
+                )
+                await storage_service.upload_bytes(
+                    data=file_bytes,
+                    object_key=object_key,
+                    content_type=uploaded_file.content_type or "application/octet-stream",
+                )
+                ct_image_entries.append({
+                    "filename": filename,
+                    "object_key": object_key,
+                    "content_type": uploaded_file.content_type or "application/octet-stream",
+                })
 
         measurements_bytes = await measurements_file.read()
         measurements_object_key = storage_service.build_object_key(
@@ -63,11 +99,7 @@ async def create_report(
         )
 
         input_files  = {
-            "ct_images": {
-                "filename": ct_images.filename,
-                "object_key": ct_images_object_key,
-                "content_type": ct_images.content_type or "application/zip",
-            },
+            "ct_images": ct_image_entries,
             "measurements": {
                 "filename": measurements_file.filename,
                 "object_key": measurements_object_key,
@@ -77,7 +109,10 @@ async def create_report(
 
         measurements_dict = file_handler.parse_measurements_file(measurements_bytes, measurements_file.filename)
 
-        uploaded_objects = [ct_images_object_key, measurements_object_key]
+        uploaded_objects = [
+            *[image["object_key"] for image in ct_image_entries],
+            measurements_object_key,
+        ]
 
         try:
             report, llm_call = await report_service.create_queued_report(

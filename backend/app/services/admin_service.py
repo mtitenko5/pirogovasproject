@@ -193,7 +193,7 @@ async def add_clinical_protocols(file: UploadFile, uploaded_by_user_id: int, db:
     except Exception:
         # Clean up orphaned storage object if database save fails
         try:
-            await storage_service.delete_file(object_key)
+            await storage_service.delete_object(object_key)
         except Exception:
             pass  # Best effort cleanup
         raise
@@ -209,7 +209,7 @@ async def add_clinical_protocols(file: UploadFile, uploaded_by_user_id: int, db:
         protocol.status = ClinicalProtocolStatus.FAILED
         await db.commit()
         try:
-            await storage_service.delete_file(object_key)
+            await storage_service.delete_object(object_key)
         except Exception:
             pass  # Best effort cleanup
         raise HTTPException(

@@ -6,6 +6,7 @@ import asyncio
 from langsmith import Client
 import os
 import logging
+import base64
 
 from app.models.report import Report
 from app.models.user import User
@@ -101,12 +102,40 @@ async def get_reports_by_user_id(
     result = result.scalars().all()
     return result
 
+async def _build_ct_image_data(report: Report) -> list[dict]:
+    images = []
+    raw_images = (report.input_files or {}).get("ct_images", [])
+
+    if isinstance(raw_images, dict):
+        raw_images = [raw_images]
+
+    for image in raw_images:
+        object_key = image.get("object_key")
+        if not object_key:
+            continue
+
+        image_bytes = await storage_service.get_object_bytes(object_key)
+        content_type = image.get("content_type") or "image/jpeg"
+        encoded = base64.b64encode(image_bytes).decode("ascii")
+
+        images.append({
+            "filename": image.get("filename", "КТ-снимок"),
+            "src": f"data:{content_type};base64,{encoded}",
+        })
+
+    return images
+
 async def render_and_store_report_files(
     db: AsyncSession,
     report: Report,
 ) -> tuple[str, str]:
     template_content = await _get_template_content(db, report.template_id)
-    html_content = generate_html_report(report, template_content=template_content)
+    ct_images = await _build_ct_image_data(report)
+    html_content = generate_html_report(
+        report,
+        template_content=template_content,
+        ct_images=ct_images,
+    )
     html_object_key = await storage_service.upload_text(
         text=html_content,
         prefix=f"reports/{report.id_report}/result",

@@ -126,8 +126,15 @@ def generate_medical_report(query: str, patient_history: str, patient_data: dict
     config = {"configurable": {"thread_id": "api-request"}, "metadata": {"report_id": report_id}}
     result = graph.invoke(initial_state, config=config)
 
+    guideline_sources = sorted({
+        item.get("source")
+        for item in result.get("retrieved_guidelines", [])
+        if item.get("source")
+    })
+
     return {
         "report": result.get("raw_llm_output"),
         "warnings": result.get("warnings", []),
         "errors": result.get("errors", []),
+        "guideline_sources": guideline_sources,
     }

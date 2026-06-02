@@ -1,4 +1,4 @@
-export type ReportStatus = 'PROCESSING' | 'READY' | 'ERROR' | 'processing' | 'ready' | 'error';
+export type ReportStatus = 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'processing' | 'completed' | 'failed';
 
 export interface Report {
   id: string;
