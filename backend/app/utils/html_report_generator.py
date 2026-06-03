@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from html import escape
+import re
 from typing import Any, Optional
 
 from jinja2 import Template
@@ -135,15 +136,6 @@ DEFAULT_REPORT_TEMPLATE = """
   </div>
   {% endif %}
 
-  {% if guideline_sources %}
-  <h2>Источники клинических рекомендаций</h2>
-  <ol>
-    {% for source in guideline_sources %}
-    <li>Гайдлайн {{ loop.index }} взят из файла {{ source }}</li>
-    {% endfor %}
-  </ol>
-  {% endif %}
-
   <p class="muted">
     Отчет сформирован автоматически. Требуется проверка врачом.
     Дата формирования: {{ generated_at }}
@@ -202,26 +194,18 @@ def _normalize_llm_response(value: Any) -> str:
         return ""
 
     if isinstance(value,str):
-        return value
+        return _remove_guideline_markers(value)
 
     if isinstance(value, dict):
         parts = []
         for key, item in value.items():
             parts.append(f"{key}: {item}")
-        return "\n\n".join(parts)
+        return _remove_guideline_markers("\n\n".join(parts))
     
-    return str(value)
+    return _remove_guideline_markers(str(value))
 
-def _extract_guideline_sources(report, meta: dict) -> list[str]:
-    sources = meta.get("guideline_sources", [])
-    if sources:
-        return sources
-
-    llm_response = getattr(report, "llm_response", None)
-    if isinstance(llm_response, dict):
-        return llm_response.get("guideline_sources", [])
-
-    return []
+def _remove_guideline_markers(text: str) -> str:
+    return re.sub(r"\[\s*GUIDELINE\s+\d+\s*\]", "", text, flags=re.IGNORECASE)
 
 def generate_html_report(
     report,
@@ -234,7 +218,6 @@ def generate_html_report(
     meta = _as_dict(report.meta)
     meta["sex"] = SEX_LABELS.get(meta.get("sex"), meta.get("sex", ""))
     measurements = _flatten_measurements(_as_dict(report.measurements))
-    guideline_sources = _extract_guideline_sources(report, meta)
     llm_response = _normalize_llm_response(report.llm_response)
     
     return template.render(
@@ -242,7 +225,6 @@ def generate_html_report(
         measurements=measurements,
         llm_response = llm_response,
         ct_images=ct_images or [],
-        guideline_sources=guideline_sources,
         report=report,
         generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
     )
