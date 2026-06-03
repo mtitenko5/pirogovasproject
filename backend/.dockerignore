@@ -1,0 +1,4 @@
+.cache/
+.kb_cache*/
+__pycache__/
+*.py[cod]

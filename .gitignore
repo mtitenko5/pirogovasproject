@@ -11,3 +11,4 @@ __pycache__/
 backend/.cache/huggingface/...
 backend/.cache/
 .cache/
+temp/
